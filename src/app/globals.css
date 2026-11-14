@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-chantilly: #fff8f9;
+  --bg-blush-shell: #fce8ee;
+  --border-berry: #f3c6d3;
+  --text-ganache: #2b1118;
+  --text-berry-muted: #7a4957;
+  --accent-crimson: #be123c;
+  --accent-strawberry: #e11d48;
+  --accent-rose: #f43f5e;
+  --accent-pink-soft: #fda4af;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-sans), system-ui, sans-serif;
+  --font-display: var(--font-display), Georgia, serif;
+  --font-mono: var(--font-mono), monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg-chantilly);
+  background-image:
+    radial-gradient(at 15% 0%, rgba(251, 113, 133, 0.14) 0px, transparent 50%),
+    radial-gradient(at 85% 5%, rgba(225, 29, 72, 0.10) 0px, transparent 45%),
+    radial-gradient(at 50% 100%, rgba(253, 164, 175, 0.12) 0px, transparent 55%);
+  background-attachment: fixed;
+  color: var(--text-ganache);
+  font-family: var(--font-sans), sans-serif;
+  overflow-x: hidden;
+}
+
+/* Tipografía de Títulos Estilo Atelier Pastelero */
+.font-editorial {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.02em;
+}
+
+.font-nums {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Arquitectura Double-Bezel (Doppelrand) en Rosa & Rojo Pastelero */
+.bezel-shell {
+  background: rgba(252, 232, 238, 0.78);
+  padding: 6px;
+  border-radius: 28px;
+  box-shadow:
+    0 12px 32px -10px rgba(190, 18, 60, 0.08),
+    0 0 0 1px rgba(244, 63, 94, 0.16);
+  transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1),
+              box-shadow 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.bezel-core {
+  background: #ffffff;
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px 0 rgba(43, 17, 24, 0.04);
+}
+
+.bezel-shell-crimson {
+  background: linear-gradient(135deg, rgba(225, 29, 72, 0.18), rgba(251, 113, 133, 0.25));
+  padding: 6px;
+  border-radius: 28px;
+  box-shadow:
+    0 16px 36px -12px rgba(190, 18, 60, 0.22),
+    0 0 0 1px rgba(190, 18, 60, 0.22);
+}
+
+.bezel-core-crimson {
+  background: linear-gradient(145deg, #be123c 0%, #e11d48 55%, #f43f5e 100%);
+  color: #ffffff;
+  border-radius: 22px;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.28);
+}
+
+/* Transiciones con física suave */
+.spring-transition {
+  transition: all 0.45s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Ocultar barra de scroll en carruseles horizontales mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Inputs estilizados para mobile (evita zoom en iOS con 16px+) */
+input[type="number"],
+input[type="text"],
+input[type="date"],
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Custom Range Slider Rosa/Rojo */
+input[type="range"].chefcita-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 8px;
+  background: #fce7f3;
+  border-radius: 999px;
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(190, 18, 60, 0.12);
+}
+
+input[type="range"].chefcita-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #be123c, #f43f5e);
+  cursor: pointer;
+  border: 3px solid #ffffff;
+  box-shadow: 0 3px 10px rgba(190, 18, 60, 0.35);
+  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+input[type="range"].chefcita-slider::-webkit-slider-thumb:active {
+  transform: scale(1.18);
 }
