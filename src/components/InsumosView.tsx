@@ -297,6 +297,42 @@ export default function InsumosView({
       </div>
 
       {/* Grilla de Tarjetas de Insumos y Empaques */}
+      {insumosFiltrados.length === 0 && (
+        <div className="bezel-shell">
+          <div className="bezel-core p-8 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#FFE4E9] text-[#BE123C] flex items-center justify-center mx-auto">
+              <Package size={28} weight="duotone" />
+            </div>
+            <div className="max-w-md mx-auto space-y-1">
+              <h3 className="font-editorial text-xl font-bold text-[#2B1118]">
+                Todavía no cargaste insumos ni empaques
+              </h3>
+              <p className="text-xs sm:text-sm text-[#7A4957]">
+                Empezá agregando tus ingredientes (harina, azúcar, manteca, chocolate) y tus cajas o bolsas con el precio que los pagás.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => abrirModalNuevo('ingrediente')}
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white px-5 py-2.5 text-xs font-bold shadow-sm cursor-pointer"
+              >
+                <Plus size={15} weight="bold" />
+                <span>Cargar mi primer Ingrediente</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => abrirModalNuevo('empaque')}
+                className="inline-flex items-center gap-2 rounded-full bg-[#2B1118] text-white px-5 py-2.5 text-xs font-bold shadow-sm cursor-pointer"
+              >
+                <Package size={15} weight="duotone" />
+                <span>Cargar mi primer Empaque / Caja</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
         {insumosFiltrados.map((ins) => {
           const infoUnitario = obtenerCostoUnitarioInsumo(ins);

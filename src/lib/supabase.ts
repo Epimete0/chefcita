@@ -6,11 +6,9 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
-  writeBatch,
 } from 'firebase/firestore';
 import { firestoreDb, initFirebaseAnalytics } from './firebase';
 import { Insumo, Receta, RecetaItem, RecetaPaso, Pedido } from './types';
-import { SEED_INSUMOS, SEED_RECETAS, SEED_PEDIDOS } from './seed-data';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -21,14 +19,48 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-const LS_KEY_INSUMOS = 'chefcita_insumos_v2';
-const LS_KEY_RECETAS = 'chefcita_recetas_v2';
-const LS_KEY_PEDIDOS = 'chefcita_pedidos_v2';
+const LS_KEY_INSUMOS = 'chefcita_real_insumos_v3';
+const LS_KEY_RECETAS = 'chefcita_real_recetas_v3';
+const LS_KEY_PEDIDOS = 'chefcita_real_pedidos_v3';
 
-/**
- * Ejecuta una promesa de red con un timeout máximo (ej. 2200ms) para que Firebase/Supabase
- * jamás bloquee la interfaz si Firestore aún no fue habilitado en la consola.
- */
+// IDs de los datos de demostración antiguos para filtrarlos si quedaron en la nube
+const DEMO_IDS = new Set([
+  '10000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000003',
+  '10000000-0000-0000-0000-000000000004',
+  '10000000-0000-0000-0000-000000000005',
+  '10000000-0000-0000-0000-000000000006',
+  '10000000-0000-0000-0000-000000000007',
+  '10000000-0000-0000-0000-000000000008',
+  '10000000-0000-0000-0000-000000000009',
+  '10000000-0000-0000-0000-000000000010',
+  '10000000-0000-0000-0000-000000000011',
+  '10000000-0000-0000-0000-000000000012',
+  '10000000-0000-0000-0000-000000000013',
+  '10000000-0000-0000-0000-000000000014',
+  '10000000-0000-0000-0000-000000000015',
+  '10000000-0000-0000-0000-000000000016',
+  '10000000-0000-0000-0000-000000000017',
+  '10000000-0000-0000-0000-000000000018',
+  '20000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000003',
+  '20000000-0000-0000-0000-000000000004',
+  '20000000-0000-0000-0000-000000000005',
+  '20000000-0000-0000-0000-000000000006',
+  '20000000-0000-0000-0000-000000000007',
+  '20000000-0000-0000-0000-000000000008',
+  '20000000-0000-0000-0000-000000000009',
+  '30000000-0000-0000-0000-000000000001',
+  '30000000-0000-0000-0000-000000000002',
+  '30000000-0000-0000-0000-000000000003',
+  '30000000-0000-0000-0000-000000000004',
+  '40000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000002',
+  '40000000-0000-0000-0000-000000000003',
+]);
+
 function conTimeout<T>(promesa: Promise<T>, ms: number = 2200): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -52,20 +84,27 @@ export function leerCacheLocal(): {
   pedidos: Pedido[];
 } {
   if (typeof window === 'undefined') {
-    return { insumos: SEED_INSUMOS, recetas: SEED_RECETAS, pedidos: SEED_PEDIDOS };
+    return { insumos: [], recetas: [], pedidos: [] };
   }
   try {
+    // Limpiar cualquier cache viejo de datos de prueba (v1/v2)
+    localStorage.removeItem('chefcita_insumos_v2');
+    localStorage.removeItem('chefcita_recetas_v2');
+    localStorage.removeItem('chefcita_pedidos_v2');
+
     const rawIns = localStorage.getItem(LS_KEY_INSUMOS);
     const rawRec = localStorage.getItem(LS_KEY_RECETAS);
     const rawPed = localStorage.getItem(LS_KEY_PEDIDOS);
 
-    const insumos: Insumo[] = rawIns ? JSON.parse(rawIns) : SEED_INSUMOS;
-    const recetasSinVincular: Receta[] = rawRec ? JSON.parse(rawRec) : SEED_RECETAS;
-    const pedidos: Pedido[] = rawPed ? JSON.parse(rawPed) : SEED_PEDIDOS;
-
-    if (!rawIns) localStorage.setItem(LS_KEY_INSUMOS, JSON.stringify(SEED_INSUMOS));
-    if (!rawRec) localStorage.setItem(LS_KEY_RECETAS, JSON.stringify(SEED_RECETAS));
-    if (!rawPed) localStorage.setItem(LS_KEY_PEDIDOS, JSON.stringify(SEED_PEDIDOS));
+    const insumos: Insumo[] = rawIns
+      ? (JSON.parse(rawIns) as Insumo[]).filter((i) => !DEMO_IDS.has(i.id))
+      : [];
+    const recetasSinVincular: Receta[] = rawRec
+      ? (JSON.parse(rawRec) as Receta[]).filter((r) => !DEMO_IDS.has(r.id))
+      : [];
+    const pedidos: Pedido[] = rawPed
+      ? (JSON.parse(rawPed) as Pedido[]).filter((p) => !DEMO_IDS.has(p.id))
+      : [];
 
     const insumosMap = new Map<string, Insumo>(insumos.map((i) => [i.id, i]));
     const recetas = recetasSinVincular.map((r) => ({
@@ -78,7 +117,7 @@ export function leerCacheLocal(): {
 
     return { insumos, recetas, pedidos };
   } catch {
-    return { insumos: SEED_INSUMOS, recetas: SEED_RECETAS, pedidos: SEED_PEDIDOS };
+    return { insumos: [], recetas: [], pedidos: [] };
   }
 }
 
@@ -98,31 +137,7 @@ function guardarCacheLocal(data: {
 }
 
 /**
- * Inicializa datos semilla en Firebase Firestore si las colecciones están vacías
- */
-async function sembrarFirestoreInicial(): Promise<void> {
-  const batch = writeBatch(firestoreDb);
-
-  for (const ins of SEED_INSUMOS) {
-    batch.set(doc(firestoreDb, 'insumos', ins.id), ins);
-  }
-  for (const rec of SEED_RECETAS) {
-    const { items, pasos, ...rest } = rec;
-    batch.set(doc(firestoreDb, 'recetas', rec.id), {
-      ...rest,
-      items: items.map(({ insumo: _ins, ...cleanItem }) => cleanItem),
-      pasos,
-    });
-  }
-  for (const ped of SEED_PEDIDOS) {
-    batch.set(doc(firestoreDb, 'pedidos', ped.id), ped);
-  }
-
-  await conTimeout(batch.commit(), 2500);
-}
-
-/**
- * Carga todos los datos de Chefcita sin bloquear jamás la pantalla.
+ * Carga únicamente los datos creados por la usuaria (empieza 100% en blanco si aún no cargó nada).
  */
 export async function cargarDatosChefcita(): Promise<{
   insumos: Insumo[];
@@ -135,7 +150,7 @@ export async function cargarDatosChefcita(): Promise<{
     initFirebaseAnalytics();
   }
 
-  // 1. Si Supabase está configurado (ej. Docker local), intentar con timeout corto (1.8s)
+  // 1. Si Supabase está configurado (ej. Docker local), consultar datos reales
   if (supabase) {
     try {
       const [insumosRes, recetasRes, itemsRes, pasosRes, pedidosRes] = await conTimeout(
@@ -162,16 +177,17 @@ export async function cargarDatosChefcita(): Promise<{
         !recetasRes.error &&
         !itemsRes.error &&
         !pasosRes.error &&
-        !pedidosRes.error &&
-        (insumosRes.data?.length || 0) > 0
+        !pedidosRes.error
       ) {
-        const insumos: Insumo[] = (insumosRes.data || []).map((row) => ({
-          ...row,
-          precio_compra: Number(row.precio_compra),
-          cantidad_paquete: Number(row.cantidad_paquete),
-          stock_actual: Number(row.stock_actual),
-          stock_minimo: Number(row.stock_minimo),
-        }));
+        const insumos: Insumo[] = (insumosRes.data || [])
+          .filter((row) => !DEMO_IDS.has(row.id))
+          .map((row) => ({
+            ...row,
+            precio_compra: Number(row.precio_compra),
+            cantidad_paquete: Number(row.cantidad_paquete),
+            stock_actual: Number(row.stock_actual),
+            stock_minimo: Number(row.stock_minimo),
+          }));
 
         const insumosMap = new Map<string, Insumo>(insumos.map((i) => [i.id, i]));
 
@@ -200,32 +216,36 @@ export async function cargarDatosChefcita(): Promise<{
           pasosPorReceta.set(paso.receta_id, list);
         }
 
-        const recetas: Receta[] = (recetasRes.data || []).map((row) => ({
-          ...row,
-          rendimiento_cantidad: Number(row.rendimiento_cantidad),
-          unidades_por_pack: Number(row.unidades_por_pack),
-          porcentaje_gastos_extras: Number(row.porcentaje_gastos_extras),
-          costo_mano_obra_lote: Number(row.costo_mano_obra_lote),
-          margen_objetivo_porcentaje: Number(row.margen_objetivo_porcentaje),
-          precio_venta_unidad: Number(row.precio_venta_unidad),
-          precio_venta_pack: Number(row.precio_venta_pack),
-          precio_venta_lote: Number(row.precio_venta_lote),
-          tiempo_preparacion_min: Number(row.tiempo_preparacion_min),
-          tiempo_horneado_min: Number(row.tiempo_horneado_min),
-          temperatura_horno_c: Number(row.temperatura_horno_c),
-          items: itemsPorReceta.get(row.id) || [],
-          pasos: pasosPorReceta.get(row.id) || [],
-        }));
+        const recetas: Receta[] = (recetasRes.data || [])
+          .filter((row) => !DEMO_IDS.has(row.id))
+          .map((row) => ({
+            ...row,
+            rendimiento_cantidad: Number(row.rendimiento_cantidad),
+            unidades_por_pack: Number(row.unidades_por_pack),
+            porcentaje_gastos_extras: Number(row.porcentaje_gastos_extras),
+            costo_mano_obra_lote: Number(row.costo_mano_obra_lote),
+            margen_objetivo_porcentaje: Number(row.margen_objetivo_porcentaje),
+            precio_venta_unidad: Number(row.precio_venta_unidad),
+            precio_venta_pack: Number(row.precio_venta_pack),
+            precio_venta_lote: Number(row.precio_venta_lote),
+            tiempo_preparacion_min: Number(row.tiempo_preparacion_min),
+            tiempo_horneado_min: Number(row.tiempo_horneado_min),
+            temperatura_horno_c: Number(row.temperatura_horno_c),
+            items: itemsPorReceta.get(row.id) || [],
+            pasos: pasosPorReceta.get(row.id) || [],
+          }));
 
-        const pedidos: Pedido[] = (pedidosRes.data || []).map((row) => ({
-          ...row,
-          cantidad_lotes: Number(row.cantidad_lotes),
-          unidades_totales: Number(row.unidades_totales),
-          costo_total_estimado: Number(row.costo_total_estimado),
-          precio_venta_total: Number(row.precio_venta_total),
-          ganancia_neta: Number(row.ganancia_neta),
-          seña_pagada: Number(row.seña_pagada),
-        }));
+        const pedidos: Pedido[] = (pedidosRes.data || [])
+          .filter((row) => !DEMO_IDS.has(row.id))
+          .map((row) => ({
+            ...row,
+            cantidad_lotes: Number(row.cantidad_lotes),
+            unidades_totales: Number(row.unidades_totales),
+            costo_total_estimado: Number(row.costo_total_estimado),
+            precio_venta_total: Number(row.precio_venta_total),
+            ganancia_neta: Number(row.ganancia_neta),
+            seña_pagada: Number(row.seña_pagada),
+          }));
 
         guardarCacheLocal({ insumos, recetas, pedidos });
 
@@ -242,7 +262,7 @@ export async function cargarDatosChefcita(): Promise<{
     }
   }
 
-  // 2. Intentar cargar desde Firebase Firestore con timeout estricto de 2 segundos
+  // 2. Consultar Firebase Firestore (sin precargar datos falsos)
   try {
     const [insSnap, recSnap, pedSnap] = await conTimeout(
       Promise.all([
@@ -253,60 +273,65 @@ export async function cargarDatosChefcita(): Promise<{
       2000
     );
 
-    if (insSnap.empty && recSnap.empty) {
-      sembrarFirestoreInicial().catch(() => {});
-      const cache = leerCacheLocal();
-      return {
-        ...cache,
-        conectadoASupabase: true,
-        motorActivo: 'Firebase',
-      };
-    }
-
-    const insumos: Insumo[] = insSnap.docs.map((d) => {
-      const data = d.data() as Insumo;
-      return {
-        ...data,
-        id: d.id,
-        precio_compra: Number(data.precio_compra),
-        cantidad_paquete: Number(data.cantidad_paquete),
-        stock_actual: Number(data.stock_actual),
-        stock_minimo: Number(data.stock_minimo),
-      };
-    });
+    const insumos: Insumo[] = insSnap.docs
+      .filter((d) => !DEMO_IDS.has(d.id))
+      .map((d) => {
+        const data = d.data() as Insumo;
+        return {
+          ...data,
+          id: d.id,
+          precio_compra: Number(data.precio_compra),
+          cantidad_paquete: Number(data.cantidad_paquete),
+          stock_actual: Number(data.stock_actual),
+          stock_minimo: Number(data.stock_minimo),
+        };
+      });
 
     const insumosMap = new Map<string, Insumo>(insumos.map((i) => [i.id, i]));
 
-    const recetas: Receta[] = recSnap.docs.map((d) => {
-      const data = d.data() as Receta;
-      return {
-        ...data,
+    const recetas: Receta[] = recSnap.docs
+      .filter((d) => !DEMO_IDS.has(d.id))
+      .map((d) => {
+        const data = d.data() as Receta;
+        return {
+          ...data,
+          id: d.id,
+          items: (data.items || []).map((it) => ({
+            ...it,
+            cantidad: Number(it.cantidad),
+            insumo: insumosMap.get(it.insumo_id),
+          })),
+          pasos: data.pasos || [],
+        };
+      });
+
+    const pedidos: Pedido[] = pedSnap.docs
+      .filter((d) => !DEMO_IDS.has(d.id))
+      .map((d) => ({
+        ...(d.data() as Pedido),
         id: d.id,
-        items: (data.items || []).map((it) => ({
-          ...it,
-          cantidad: Number(it.cantidad),
-          insumo: insumosMap.get(it.insumo_id),
-        })),
-        pasos: data.pasos || [],
-      };
+      }));
+
+    // Si en cache local ya había datos creados por la usuaria pero Firestore aún estaba vacío, conservar los de la usuaria
+    const cache = leerCacheLocal();
+    const insumosFinal = insumos.length > 0 ? insumos : cache.insumos;
+    const recetasFinal = recetas.length > 0 ? recetas : cache.recetas;
+    const pedidosFinal = pedidos.length > 0 ? pedidos : cache.pedidos;
+
+    guardarCacheLocal({
+      insumos: insumosFinal,
+      recetas: recetasFinal,
+      pedidos: pedidosFinal,
     });
 
-    const pedidos: Pedido[] = pedSnap.docs.map((d) => ({
-      ...(d.data() as Pedido),
-      id: d.id,
-    }));
-
-    guardarCacheLocal({ insumos, recetas, pedidos });
-
     return {
-      insumos,
-      recetas,
-      pedidos,
+      insumos: insumosFinal,
+      recetas: recetasFinal,
+      pedidos: pedidosFinal,
       conectadoASupabase: true,
       motorActivo: 'Firebase',
     };
   } catch {
-    // 3. Respuesta inmediata desde LocalStorage (con los 27 insumos y 4 recetas completas)
     const cache = leerCacheLocal();
     return {
       ...cache,
@@ -317,7 +342,7 @@ export async function cargarDatosChefcita(): Promise<{
 }
 
 // ============================================================================
-// OPERACIONES CRUD INSTANTÁNEAS (0ms en UI + sincronización en background)
+// OPERACIONES CRUD INSTANTÁNEAS
 // ============================================================================
 
 export async function guardarInsumoDB(
@@ -339,7 +364,6 @@ export async function guardarInsumoDB(
     updated_at: new Date().toISOString(),
   };
 
-  // 1. Guardar instantáneamente en cache local
   const cache = leerCacheLocal();
   const existe = cache.insumos.some((i) => i.id === id);
   const nuevosInsumos = existe
@@ -347,7 +371,6 @@ export async function guardarInsumoDB(
     : [payload, ...cache.insumos];
   guardarCacheLocal({ insumos: nuevosInsumos });
 
-  // 2. Sincronizar en background con Supabase y Firebase (sin bloquear la UI)
   if (supabase) {
     const { id: _omit, ...dbRow } = payload;
     const op = insumo.id

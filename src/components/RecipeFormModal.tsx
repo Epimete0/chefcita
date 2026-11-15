@@ -7,6 +7,7 @@ import {
   RecetaItem,
   RecetaPaso,
   SeccionRecetaItem,
+  TipoInsumo,
   UnidadMedida,
 } from '@/lib/types';
 import {
@@ -24,12 +25,14 @@ import {
   Heart,
   ListNumbers,
   Sparkle,
+  Check,
 } from '@phosphor-icons/react';
 
 interface RecipeFormModalProps {
   recetaInicial?: Receta | null;
   insumos: Insumo[];
   onClose: () => void;
+  onCrearInsumoRapido: (insumo: Omit<Insumo, 'id'>) => Promise<Insumo>;
   onSave: (
     receta: Omit<Receta, 'id' | 'items' | 'pasos'> & { id?: string },
     items: Array<Omit<RecetaItem, 'id' | 'receta_id'>>,
@@ -44,6 +47,7 @@ export default function RecipeFormModal({
   recetaInicial,
   insumos,
   onClose,
+  onCrearInsumoRapido,
   onSave,
 }: RecipeFormModalProps) {
   const [nombre, setNombre] = useState(recetaInicial?.nombre || '');
@@ -53,7 +57,7 @@ export default function RecipeFormModal({
     recetaInicial?.rendimiento_cantidad || 12
   );
   const [rendimientoUnidad, setRendimientoUnidad] = useState(
-    recetaInicial?.rendimiento_unidad || 'donas'
+    recetaInicial?.rendimiento_unidad || 'unidades'
   );
   const [unidadesPorPack, setUnidadesPorPack] = useState<number>(
     recetaInicial?.unidades_por_pack || 6
@@ -66,7 +70,7 @@ export default function RecipeFormModal({
     recetaInicial?.margen_objetivo_porcentaje ?? 60
   );
   const [precioVentaPack, setPrecioVentaPack] = useState<number>(
-    recetaInicial?.precio_venta_pack || 7800
+    recetaInicial?.precio_venta_pack || 0
   );
   const [tiempoPrep, setTiempoPrep] = useState<number>(
     recetaInicial?.tiempo_preparacion_min || 40
@@ -81,7 +85,15 @@ export default function RecipeFormModal({
     recetaInicial?.metodo_coccion || 'Horno'
   );
   const [notasChefcita, setNotasChefcita] = useState(recetaInicial?.notas_chefcita || '');
-  const [favorita, setFavorita] = useState<boolean>(recetaInicial?.favorita ?? true);
+  const [favorita] = useState<boolean>(recetaInicial?.favorita ?? true);
+
+  // Mini creador rápido de insumo dentro de la receta
+  const [creandoInsumoSeccion, setCreandoInsumoSeccion] = useState<SeccionRecetaItem | null>(null);
+  const [nuevoInsNombre, setNuevoInsNombre] = useState('');
+  const [nuevoInsPrecio, setNuevoInsPrecio] = useState<number>(1500);
+  const [nuevoInsCantPaq, setNuevoInsCantPaq] = useState<number>(1000);
+  const [nuevoInsUnidad, setNuevoInsUnidad] = useState<UnidadMedida>('g');
+  const [nuevoInsCantUsada, setNuevoInsCantUsada] = useState<number>(250);
 
   const insumosIngredientes = useMemo(
     () => insumos.filter((i) => i.tipo === 'ingrediente'),
@@ -117,34 +129,7 @@ export default function RecipeFormModal({
         nota: it.nota || '',
       }));
     }
-    const primerIng = insumosIngredientes[0];
-    const primerEmp = insumosEmpaques[0];
-    return [
-      ...(primerIng
-        ? [
-            {
-              tempId: 'init-1',
-              insumo_id: primerIng.id,
-              seccion: 'masa' as SeccionRecetaItem,
-              cantidad: 500,
-              unidad: primerIng.unidad,
-              nota: '',
-            },
-          ]
-        : []),
-      ...(primerEmp
-        ? [
-            {
-              tempId: 'init-2',
-              insumo_id: primerEmp.id,
-              seccion: 'empaque' as SeccionRecetaItem,
-              cantidad: 2,
-              unidad: primerEmp.unidad,
-              nota: '',
-            },
-          ]
-        : []),
-    ];
+    return [];
   });
 
   // Pasos de preparación
@@ -169,16 +154,9 @@ export default function RecipeFormModal({
     return [
       {
         tempId: 'p-1',
-        etapa: 'Masa y Preparación',
-        instruccion: 'Integrar los ingredientes secos y húmedos hasta obtener una mezcla homogénea.',
-        tiempo_timer_min: 15,
-        tip_secreto: 'Usar ingredientes a temperatura ambiente.',
-      },
-      {
-        tempId: 'p-2',
-        etapa: 'Cocción y Decoración',
-        instruccion: 'Cocinar a temperatura indicada, dejar enfriar sobre rejilla, decorar y empacar.',
-        tiempo_timer_min: 20,
+        etapa: 'Preparación',
+        instruccion: '',
+        tiempo_timer_min: null,
         tip_secreto: '',
       },
     ];
@@ -186,10 +164,14 @@ export default function RecipeFormModal({
 
   const [guardando, setGuardando] = useState(false);
 
-  const agregarItem = (seccion: SeccionRecetaItem) => {
+  const agregarItemExistente = (seccion: SeccionRecetaItem) => {
     const listaCandidata = seccion === 'empaque' ? insumosEmpaques : insumosIngredientes;
     const defaultInsumo = listaCandidata[0] || insumos[0];
-    if (!defaultInsumo) return;
+    if (!defaultInsumo) {
+      // Si aún no hay insumos creados, abrimos el mini-creador rápido directo en esa sección
+      abrirMiniCreadorInsumo(seccion);
+      return;
+    }
     setItems((prev) => [
       ...prev,
       {
@@ -201,6 +183,52 @@ export default function RecipeFormModal({
         nota: '',
       },
     ]);
+  };
+
+  const abrirMiniCreadorInsumo = (seccion: SeccionRecetaItem) => {
+    setCreandoInsumoSeccion(seccion);
+    setNuevoInsNombre('');
+    if (seccion === 'empaque') {
+      setNuevoInsPrecio(5000);
+      setNuevoInsCantPaq(10);
+      setNuevoInsUnidad('u');
+      setNuevoInsCantUsada(2);
+    } else {
+      setNuevoInsPrecio(1500);
+      setNuevoInsCantPaq(1000);
+      setNuevoInsUnidad('g');
+      setNuevoInsCantUsada(250);
+    }
+  };
+
+  const handleConfirmarMiniInsumo = async () => {
+    if (!nuevoInsNombre.trim() || !creandoInsumoSeccion) return;
+    const tipoInsumo: TipoInsumo = creandoInsumoSeccion === 'empaque' ? 'empaque' : 'ingrediente';
+    const creado = await onCrearInsumoRapido({
+      nombre: nuevoInsNombre.trim(),
+      tipo: tipoInsumo,
+      categoria: tipoInsumo === 'empaque' ? 'Cajas y Bandejas' : 'Harinas y Secos',
+      precio_compra: Number(nuevoInsPrecio) || 0,
+      cantidad_paquete: Math.max(0.01, Number(nuevoInsCantPaq) || 1),
+      unidad: nuevoInsUnidad,
+      stock_actual: Number(nuevoInsCantPaq) || 0,
+      stock_minimo: 0,
+      proveedor: '',
+      notas: '',
+    });
+
+    setItems((prev) => [
+      ...prev,
+      {
+        tempId: crypto.randomUUID(),
+        insumo_id: creado.id,
+        seccion: creandoInsumoSeccion,
+        cantidad: Number(nuevoInsCantUsada) || 1,
+        unidad: creado.unidad,
+        nota: '',
+      },
+    ]);
+    setCreandoInsumoSeccion(null);
   };
 
   const eliminarItem = (tempId: string) => {
@@ -285,7 +313,7 @@ export default function RecipeFormModal({
       const rend = Math.max(1, Number(rendimientoCantidad) || 1);
       const unidPack = Math.max(1, Number(unidadesPorPack) || 1);
       const packsEnLote = rend / unidPack;
-      const pPack = Number(precioVentaPack) || resumenVivo.sugeridoPack;
+      const pPack = Number(precioVentaPack) > 0 ? Number(precioVentaPack) : resumenVivo.sugeridoPack;
       const pUnidad = redondearPrecioComercial(pPack / unidPack);
       const pLote = Math.round(pPack * packsEnLote);
 
@@ -370,7 +398,7 @@ export default function RecipeFormModal({
                   <input
                     type="text"
                     required
-                    placeholder="Ej: Donas Glaseadas & Sprinkles"
+                    placeholder="Ej: Donas Glaseadas, Torta Matilda..."
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
                     className="w-full rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-3.5 py-2.5 text-sm text-[#2B1118] focus:outline-none focus:ring-2 focus:ring-[#E11D48]"
@@ -486,6 +514,8 @@ export default function RecipeFormModal({
             },
           ].map((bloque) => {
             const itemsSeccion = items.filter((i) => i.seccion === bloque.seccion);
+            const mostrandoCreadorAqui = creandoInsumoSeccion === bloque.seccion;
+
             return (
               <div key={bloque.seccion} className="bezel-shell">
                 <div className="bezel-core p-4 sm:p-5">
@@ -499,24 +529,125 @@ export default function RecipeFormModal({
                         <p className="text-xs text-[#7A4957]">{bloque.subtitulo}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-nums text-sm font-extrabold text-[#BE123C]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-nums text-xs sm:text-sm font-extrabold text-[#BE123C]">
                         Subtotal: {formatearMoneda(bloque.subtotal)}
                       </span>
+                      {insumos.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => agregarItemExistente(bloque.seccion)}
+                          className="inline-flex items-center gap-1 rounded-full bg-[#FFE4E9] hover:bg-[#FECDD3] text-[#BE123C] px-3 py-1.5 text-xs font-bold cursor-pointer"
+                        >
+                          <Plus size={14} weight="bold" />
+                          Elegir de mis insumos
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => agregarItem(bloque.seccion)}
-                        className="inline-flex items-center gap-1 rounded-full bg-[#FFE4E9] hover:bg-[#FECDD3] text-[#BE123C] px-3 py-1.5 text-xs font-bold cursor-pointer"
+                        onClick={() => abrirMiniCreadorInsumo(bloque.seccion)}
+                        className="inline-flex items-center gap-1 rounded-full bg-[#2B1118] text-white px-3 py-1.5 text-xs font-bold cursor-pointer"
                       >
                         <Plus size={14} weight="bold" />
-                        Agregar
+                        Crear insumo nuevo acá
                       </button>
                     </div>
                   </div>
 
+                  {/* Mini creador rápido de Insumo dentro de la sección */}
+                  {mostrandoCreadorAqui && (
+                    <div className="mt-3 rounded-2xl bg-[#FFF0F3] border-2 border-[#E11D48] p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#BE123C]">
+                          Crear nuevo {bloque.seccion === 'empaque' ? 'empaque' : 'ingrediente'} y sumarlo a esta sección:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCreandoInsumoSeccion(null)}
+                          className="text-xs text-[#7A4957] hover:text-[#2B1118] cursor-pointer"
+                        >
+                          Cerrar
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-bold text-[#7A4957]">
+                            Nombre (ej: Harina, Caja x6)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Nombre del insumo"
+                            value={nuevoInsNombre}
+                            onChange={(e) => setNuevoInsNombre(e.target.value)}
+                            className="w-full rounded-xl bg-white border border-[#F3C6D3] px-2.5 py-1.5 text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#7A4957]">
+                            Precio Paquete ($)
+                          </label>
+                          <input
+                            type="number"
+                            value={nuevoInsPrecio}
+                            onChange={(e) => setNuevoInsPrecio(Number(e.target.value))}
+                            className="w-full font-nums rounded-xl bg-white border border-[#F3C6D3] px-2.5 py-1.5 text-xs font-bold text-[#BE123C]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#7A4957]">
+                            Viene en el paquete
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              value={nuevoInsCantPaq}
+                              onChange={(e) => setNuevoInsCantPaq(Number(e.target.value))}
+                              className="w-full font-nums rounded-xl bg-white border border-[#F3C6D3] px-2 py-1.5 text-xs font-bold"
+                            />
+                            <select
+                              value={nuevoInsUnidad}
+                              onChange={(e) => setNuevoInsUnidad(e.target.value as UnidadMedida)}
+                              className="rounded-xl bg-white border border-[#F3C6D3] px-1.5 py-1.5 text-xs font-bold"
+                            >
+                              <option value="g">g</option>
+                              <option value="kg">kg</option>
+                              <option value="ml">ml</option>
+                              <option value="l">l</option>
+                              <option value="u">u</option>
+                              <option value="cm">cm</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-[#15803D]">
+                            Usás en esta receta
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              value={nuevoInsCantUsada}
+                              onChange={(e) => setNuevoInsCantUsada(Number(e.target.value))}
+                              className="w-full font-nums rounded-xl bg-white border border-[#16A34A] px-2 py-1.5 text-xs font-bold text-[#15803D]"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleConfirmarMiniInsumo}
+                              className="rounded-xl bg-[#16A34A] text-white px-3 py-1.5 text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                            >
+                              <Check size={14} weight="bold" />
+                              Sumar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {itemsSeccion.length === 0 ? (
                     <p className="text-xs text-[#7A4957] py-4 text-center">
-                      No hay insumos en esta sección. Tocá &ldquo;+ Agregar&rdquo; para sumar uno.
+                      Todavía no sumaste insumos en esta sección. Tocá{' '}
+                      <strong>&ldquo;+ Crear insumo nuevo acá&rdquo;</strong> o{' '}
+                      <strong>&ldquo;+ Elegir de mis insumos&rdquo;</strong>.
                     </p>
                   ) : (
                     <div className="mt-3 space-y-2.5">
@@ -668,7 +799,8 @@ export default function RecipeFormModal({
                   <input
                     type="number"
                     min={0}
-                    value={precioVentaPack}
+                    placeholder={String(resumenVivo.sugeridoPack)}
+                    value={precioVentaPack || ''}
                     onChange={(e) => setPrecioVentaPack(Number(e.target.value))}
                     className="w-full font-nums rounded-xl border-2 border-[#E11D48] bg-white px-3 py-2 text-base font-extrabold text-[#BE123C]"
                   />
@@ -773,7 +905,7 @@ export default function RecipeFormModal({
                         </span>
                         <input
                           type="text"
-                          placeholder="Título de etapa (ej: Primer Leudado)"
+                          placeholder="Título de etapa (ej: Amasado, Leudado, Horneado)"
                           value={p.etapa}
                           onChange={(e) =>
                             setPasos((prev) =>
@@ -863,7 +995,7 @@ export default function RecipeFormModal({
               className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white px-6 py-2.5 text-xs sm:text-sm font-bold shadow-md cursor-pointer"
             >
               <FloppyDisk size={18} weight="duotone" />
-              <span>{guardando ? 'Guardando en Supabase...' : 'Guardar Receta y Costos'}</span>
+              <span>{guardando ? 'Guardando...' : 'Guardar Receta y Costos'}</span>
             </button>
           </div>
         </form>
