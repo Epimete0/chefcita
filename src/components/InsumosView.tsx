@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Insumo, TipoInsumo, UnidadMedida } from '@/lib/types';
 import { obtenerCostoUnitarioInsumo, formatearMoneda } from '@/lib/costing';
 import {
@@ -20,6 +20,7 @@ import {
 
 interface InsumosViewProps {
   insumos: Insumo[];
+  abrirNuevoTrigger?: number;
   onGuardarInsumo: (insumo: Omit<Insumo, 'id'> & { id?: string }) => Promise<void>;
   onActualizarPrecioRapido: (id: string, nuevoPrecio: number, nuevaCant?: number) => Promise<void>;
   onEliminarInsumo: (id: string) => Promise<void>;
@@ -42,6 +43,7 @@ const CATEGORIAS_EMPAQUE = [
 
 export default function InsumosView({
   insumos,
+  abrirNuevoTrigger = 0,
   onGuardarInsumo,
   onActualizarPrecioRapido,
   onEliminarInsumo,
@@ -86,6 +88,12 @@ export default function InsumosView({
     setNotas('');
     setModalAbierto(true);
   };
+
+  useEffect(() => {
+    if (abrirNuevoTrigger > 0) {
+      abrirModalNuevo('ingrediente');
+    }
+  }, [abrirNuevoTrigger]);
 
   const abrirModalEditar = (ins: Insumo) => {
     setInsumoEditando(ins);

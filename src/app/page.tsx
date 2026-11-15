@@ -9,8 +9,10 @@ import {
   Pedido,
   ResumenCostosReceta,
 } from '@/lib/types';
+import { SEED_INSUMOS, SEED_RECETAS, SEED_PEDIDOS } from '@/lib/seed-data';
 import {
   cargarDatosChefcita,
+  leerCacheLocal,
   guardarInsumoDB,
   actualizarPrecioInsumoDB,
   eliminarInsumoDB,
@@ -43,16 +45,19 @@ type TabPrincipal = 'recetas' | 'insumos' | 'pedidos';
 
 export default function ChefcitaApp() {
   const [tabActiva, setTabActiva] = useState<TabPrincipal>('recetas');
-  const [insumos, setInsumos] = useState<Insumo[]>([]);
-  const [recetas, setRecetas] = useState<Receta[]>([]);
-  const [pedidos, setPedidos] = useState<Pedido[]>([]);
-  const [recetaActivaId, setRecetaActivaId] = useState<string>('');
+  // Inicializamos al instante sin pantalla de bloqueo
+  const [insumos, setInsumos] = useState<Insumo[]>(SEED_INSUMOS);
+  const [recetas, setRecetas] = useState<Receta[]>(SEED_RECETAS);
+  const [pedidos, setPedidos] = useState<Pedido[]>(SEED_PEDIDOS);
+  const [recetaActivaId, setRecetaActivaId] = useState<string>(SEED_RECETAS[0]?.id || '');
   const [motorActivo, setMotorActivo] = useState<'Supabase' | 'Firebase' | 'Local'>('Firebase');
-  const [cargando, setCargando] = useState<boolean>(true);
 
   // Modal de crear / editar receta
   const [modalRecetaAbierto, setModalRecetaAbierto] = useState(false);
   const [recetaEnEdicion, setRecetaEnEdicion] = useState<Receta | null>(null);
+
+  // Trigger para abrir modal de Nuevo Insumo directo desde cualquier pantalla
+  const [abrirModalInsumoDirecto, setAbrirModalInsumoDirecto] = useState<number>(0);
 
   // Toast de feedback
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -65,6 +70,17 @@ export default function ChefcitaApp() {
   }, []);
 
   const recargarTodo = useCallback(async () => {
+    // 1. Cargar instantáneamente del cache local en el navegador (0ms)
+    const local = leerCacheLocal();
+    setInsumos(local.insumos);
+    setRecetas(local.recetas);
+    setPedidos(local.pedidos);
+    setRecetaActivaId((prev) => {
+      if (prev && local.recetas.some((r) => r.id === prev)) return prev;
+      return local.recetas[0]?.id || '';
+    });
+
+    // 2. Sincronizar con Firebase / Supabase en background sin bloquear la UI
     const data = await cargarDatosChefcita();
     setInsumos(data.insumos);
     setRecetas(data.recetas);
@@ -74,7 +90,6 @@ export default function ChefcitaApp() {
       if (prev && data.recetas.some((r) => r.id === prev)) return prev;
       return data.recetas[0]?.id || '';
     });
-    setCargando(false);
   }, []);
 
   useEffect(() => {
@@ -132,8 +147,9 @@ export default function ChefcitaApp() {
     }
   ) => {
     await actualizarPreciosVentaRecetaDB(recetaId, precios);
-    await recargarTodo();
-    mostrarToast('Precio de venta y margen actualizados en la base de datos.');
+    const local = leerCacheLocal();
+    setRecetas(local.recetas);
+    mostrarToast('¡Precio de venta y ganancia actualizados!');
   };
 
   const handleGuardarRecetaCompleta = async (
@@ -142,7 +158,8 @@ export default function ChefcitaApp() {
     pasos: Array<Omit<RecetaPaso, 'id' | 'receta_id'>>
   ) => {
     const idGuardado = await guardarRecetaCompletaDB(recetaData, items, pasos);
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setRecetas(local.recetas);
     setRecetaActivaId(idGuardado);
     mostrarToast(
       recetaData.id ? 'Receta actualizada con éxito.' : '¡Nueva receta creada en tu recetario!'
@@ -151,7 +168,9 @@ export default function ChefcitaApp() {
 
   const handleEliminarReceta = async (recetaId: string) => {
     await eliminarRecetaDB(recetaId);
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setRecetas(local.recetas);
+    setRecetaActivaId(local.recetas[0]?.id || '');
     mostrarToast('Receta eliminada.');
   };
 
@@ -174,7 +193,8 @@ export default function ChefcitaApp() {
       seña_pagada: 0,
       notas: `Generado desde calculadora (${resumen.rendimientoEscalado} ${receta.rendimiento_unidad})`,
     });
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setPedidos(local.pedidos);
     setTabActiva('pedidos');
     mostrarToast('¡Tanda agendada en Mis Pedidos!');
   };
@@ -182,8 +202,10 @@ export default function ChefcitaApp() {
   // Handlers de Insumos
   const handleGuardarInsumo = async (insumo: Omit<Insumo, 'id'> & { id?: string }) => {
     await guardarInsumoDB(insumo);
-    await recargarTodo();
-    mostrarToast('Insumo guardado y costos de recetas recalculados.');
+    const local = leerCacheLocal();
+    setInsumos(local.insumos);
+    setRecetas(local.recetas);
+    mostrarToast('¡Insumo guardado! Costos de recetas recalculados.');
   };
 
   const handleActualizarPrecioRapido = async (
@@ -192,36 +214,38 @@ export default function ChefcitaApp() {
     nuevaCantidad?: number
   ) => {
     await actualizarPrecioInsumoDB(id, nuevoPrecio, nuevaCantidad);
-    await recargarTodo();
-    mostrarToast('Precio actualizado. Todas tus recetas se recalcularon.');
+    const local = leerCacheLocal();
+    setInsumos(local.insumos);
+    setRecetas(local.recetas);
+    mostrarToast('¡Precio actualizado! Todas tus recetas se recalcularon.');
   };
 
   const handleEliminarInsumo = async (id: string) => {
-    try {
-      await eliminarInsumoDB(id);
-      await recargarTodo();
-      mostrarToast('Insumo eliminado.');
-    } catch {
-      mostrarToast('Este insumo está en uso en una receta activa.');
-    }
+    await eliminarInsumoDB(id);
+    const local = leerCacheLocal();
+    setInsumos(local.insumos);
+    mostrarToast('Insumo eliminado.');
   };
 
   // Handlers de Pedidos
   const handleCrearPedido = async (pedido: Omit<Pedido, 'id'>) => {
     await guardarPedidoDB(pedido);
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setPedidos(local.pedidos);
     mostrarToast('¡Pedido agendado correctamente!');
   };
 
   const handleCambiarEstadoPedido = async (id: string, estado: Pedido['estado']) => {
     await cambiarEstadoPedidoDB(id, estado);
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setPedidos(local.pedidos);
     mostrarToast('Estado del pedido actualizado.');
   };
 
   const handleEliminarPedido = async (id: string) => {
     await eliminarPedidoDB(id);
-    await recargarTodo();
+    const local = leerCacheLocal();
+    setPedidos(local.pedidos);
     mostrarToast('Pedido eliminado.');
   };
 
@@ -237,29 +261,29 @@ export default function ChefcitaApp() {
 
       {/* Barra Superior Estilo "Fluid Island" */}
       <header className="sticky top-0 z-30 pt-3 sm:pt-5 px-3 sm:px-6">
-        <div className="max-w-6xl mx-auto rounded-full bg-white/85 backdrop-blur-xl border border-[#F3C6D3] shadow-[0_10px_30px_-10px_rgba(190,18,60,0.12)] px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto rounded-full bg-white/90 backdrop-blur-xl border border-[#F3C6D3] shadow-[0_10px_30px_-10px_rgba(190,18,60,0.12)] px-4 sm:px-6 py-2.5 flex items-center justify-between gap-2">
           {/* Marca Chefcita */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#BE123C] via-[#E11D48] to-[#FB7185] text-white flex items-center justify-center shadow-sm">
-              <Heart size={20} weight="fill" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-[#BE123C] via-[#E11D48] to-[#FB7185] text-white flex items-center justify-center shadow-sm shrink-0">
+              <Heart size={19} weight="fill" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-editorial text-lg sm:text-xl font-extrabold text-[#2B1118] leading-none">
                   Chefcita
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#FFF0F3] border border-[#F3C6D3] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#BE123C]">
+                <span className="hidden lg:inline-flex items-center gap-1 rounded-full bg-[#FFF0F3] border border-[#F3C6D3] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#BE123C]">
                   <Database size={11} weight="duotone" />
-                  {motorActivo === 'Supabase' ? 'Supabase + Firebase' : 'Firebase Activo · chefcita'}
+                  {motorActivo === 'Supabase' ? 'Supabase + Firebase' : 'Firebase · chefcita'}
                 </span>
               </div>
-              <p className="text-[11px] text-[#7A4957]">
-                Pastelería en Casa · Costos, Masa, Empaque & Recetario
+              <p className="text-[10px] sm:text-[11px] text-[#7A4957]">
+                Costos, Masa, Empaque & Recetario
               </p>
             </div>
           </div>
 
-          {/* Navegación Desktop (Oculta en mobile porque mobile tiene su barra inferior para el pulgar) */}
+          {/* Navegación Desktop */}
           <nav className="hidden md:flex items-center gap-1.5 rounded-full bg-[#FFF0F3] p-1 border border-[#F3C6D3]">
             {[
               { id: 'recetas', label: 'Recetas y Costos', icon: CookingPot, count: recetas.length },
@@ -298,264 +322,296 @@ export default function ChefcitaApp() {
             })}
           </nav>
 
-          {/* Botón CTA "Button-in-Button" para Nueva Receta */}
-          <button
-            type="button"
-            onClick={() => {
-              setRecetaEnEdicion(null);
-              setModalRecetaAbierto(true);
-            }}
-            className="group inline-flex items-center gap-2.5 rounded-full bg-[#2B1118] hover:bg-[#451A26] active:scale-[0.98] text-white pl-4 pr-1.5 py-1.5 text-xs font-bold spring-transition cursor-pointer"
-          >
-            <span>Nueva Receta</span>
-            <span className="w-7 h-7 rounded-full bg-[#E11D48] text-white flex items-center justify-center group-hover:translate-x-0.5 group-hover:-translate-y-0.5 spring-transition">
+          {/* Acciones Directas: + Insumo y + Receta */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setTabActiva('insumos');
+                setAbrirModalInsumoDirecto((n) => n + 1);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#FFE4E9] hover:bg-[#FECDD3] active:scale-[0.98] text-[#BE123C] px-3 py-2 text-xs font-bold spring-transition cursor-pointer"
+            >
               <Plus size={14} weight="bold" />
-            </span>
-          </button>
+              <span>Insumo / Caja</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setRecetaEnEdicion(null);
+                setModalRecetaAbierto(true);
+              }}
+              className="group inline-flex items-center gap-2 rounded-full bg-[#2B1118] hover:bg-[#451A26] active:scale-[0.98] text-white pl-3.5 pr-1.5 py-1.5 text-xs font-bold spring-transition cursor-pointer"
+            >
+              <span>Receta</span>
+              <span className="w-6 h-6 rounded-full bg-[#E11D48] text-white flex items-center justify-center group-hover:translate-x-0.5 group-hover:-translate-y-0.5 spring-transition">
+                <Plus size={13} weight="bold" />
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Contenido Principal */}
+      {/* Contenido Principal (Sin pantalla de bloqueo) */}
       <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 space-y-6">
-        {cargando ? (
-          <div className="bezel-shell">
-            <div className="bezel-core p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-[#FFE4E9] text-[#BE123C] flex items-center justify-center mx-auto animate-pulse">
-                <CookingPot size={26} weight="duotone" />
-              </div>
-              <p className="font-editorial text-lg font-bold text-[#2B1118]">
-                Preparando tu mesa de pastelería...
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* ============================================================== */}
-            {/* TAB 1: RECETAS, DESGLOSE MASA/EMPAQUE, PRECIO Y MODO PREPARAR  */}
-            {/* ============================================================== */}
-            {tabActiva === 'recetas' && (
-              <div className="space-y-6">
-                {/* Banner de Bienvenida + Métricas Rápidas */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
-                  <div className="lg:col-span-7 bezel-shell-crimson">
-                    <div className="bezel-core-crimson p-5 sm:p-6 h-full flex flex-col justify-between">
-                      <div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
-                          <Sparkle size={12} weight="fill" />
-                          Tu Atelier de Pastelería en Casa
-                        </span>
-                        <h2 className="font-editorial text-2xl sm:text-3xl font-bold text-white mt-2 leading-tight">
-                          Controlá cuánto sale tu masa, tu empaque y cuánto ganás en cada entrega.
-                        </h2>
-                        <p className="text-xs sm:text-sm text-[#FFE4E9] mt-1.5 leading-relaxed">
-                          Tocá cualquiera de tus recetas abajo para ver el costo exacto por unidad y por caja, simular el precio de venta o entrar al <strong className="text-white">Modo Preparar</strong> paso a paso.
-                        </p>
-                      </div>
-
-                      <div className="mt-4 pt-3 border-t border-white/20 flex flex-wrap items-center gap-4 text-xs">
-                        <div>
-                          <span className="text-[#FFE4E9] block text-[11px]">Margen Promedio</span>
-                          <span className="font-nums text-lg font-extrabold text-white">
-                            {estadisticasGenerales.margenPromedio}% de ganancia
-                          </span>
-                        </div>
-                        <div className="h-7 w-px bg-white/20" />
-                        <div>
-                          <span className="text-[#FFE4E9] block text-[11px]">
-                            Ganancia Promedio por Tanda
-                          </span>
-                          <span className="font-nums text-lg font-extrabold text-[#BBF7D0]">
-                            +{formatearMoneda(estadisticasGenerales.gananciaPromedioLote)}
-                          </span>
-                        </div>
-                        <div className="h-7 w-px bg-white/20 hidden sm:block" />
-                        <button
-                          type="button"
-                          onClick={() => setTabActiva('insumos')}
-                          className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-white text-[#BE123C] px-3.5 py-1.5 text-xs font-bold shadow-xs hover:bg-[#FFF0F3] cursor-pointer spring-transition"
-                        >
-                          <span>Actualizar precios de insumos</span>
-                          <ArrowUpRight size={14} weight="bold" />
-                        </button>
-                      </div>
-                    </div>
+        {/* ============================================================== */}
+        {/* TAB 1: RECETAS, DESGLOSE MASA/EMPAQUE, PRECIO Y MODO PREPARAR  */}
+        {/* ============================================================== */}
+        {tabActiva === 'recetas' && (
+          <div className="space-y-6">
+            {/* Banner de Bienvenida + Accesos Rápidos */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+              <div className="lg:col-span-7 bezel-shell-crimson">
+                <div className="bezel-core-crimson p-5 sm:p-6 h-full flex flex-col justify-between">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-white">
+                      <Sparkle size={12} weight="fill" />
+                      Tu Atelier de Pastelería en Casa
+                    </span>
+                    <h2 className="font-editorial text-2xl sm:text-3xl font-bold text-white mt-2 leading-tight">
+                      Calculá cuánto sale tu masa, tu empaque y tu ganancia real.
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#FFE4E9] mt-1.5 leading-relaxed">
+                      Abajo tenés tus recetas listas (como <strong className="text-white">Donas Glaseadas</strong>, <strong className="text-white">Red Velvet</strong> o <strong className="text-white">Torta Matilda</strong>), y podés cargar todos los insumos, cajas o recetas nuevas que quieras.
+                    </p>
                   </div>
 
-                  {/* Tarjetas Resumen Rápidas de Costos */}
-                  <div className="lg:col-span-5 grid grid-cols-2 gap-3.5">
-                    <button
-                      type="button"
-                      onClick={() => setTabActiva('insumos')}
-                      className="bezel-shell text-left cursor-pointer hover:-translate-y-0.5"
-                    >
-                      <div className="bezel-core p-4 h-full flex flex-col justify-between">
-                        <div className="w-9 h-9 rounded-2xl bg-[#FFE4E9] text-[#BE123C] flex items-center justify-center">
-                          <Package size={20} weight="duotone" />
-                        </div>
-                        <div className="mt-3">
-                          <div className="font-nums text-2xl font-extrabold text-[#2B1118]">
-                            {insumos.length}
-                          </div>
-                          <div className="text-xs font-bold text-[#2B1118]">
-                            Insumos y Empaques
-                          </div>
-                          <div className="text-[11px] text-[#7A4957] mt-0.5">
-                            {insumos.filter((i) => i.tipo === 'ingrediente').length} ingredientes ·{' '}
-                            {insumos.filter((i) => i.tipo === 'empaque').length} empaques
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTabActiva('pedidos')}
-                      className="bezel-shell text-left cursor-pointer hover:-translate-y-0.5"
-                    >
-                      <div className="bezel-core p-4 h-full flex flex-col justify-between">
-                        <div className="w-9 h-9 rounded-2xl bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
-                          <TrendUp size={20} weight="bold" />
-                        </div>
-                        <div className="mt-3">
-                          <div className="font-nums text-2xl font-extrabold text-[#15803D]">
-                            {pedidos.filter((p) => p.estado !== 'entregado').length}
-                          </div>
-                          <div className="text-xs font-bold text-[#2B1118]">
-                            Pedidos en Curso
-                          </div>
-                          <div className="text-[11px] text-[#7A4957] mt-0.5">
-                            Ver agenda y lista de compras
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Selector Visual de Recetas (Tarjetas horizontales interactivas) */}
-                <div>
-                  <div className="flex items-center justify-between mb-3 px-1">
+                  <div className="mt-4 pt-3 border-t border-white/20 flex flex-wrap items-center gap-3 text-xs">
                     <div>
-                      <span className="text-[11px] font-bold uppercase tracking-widest text-[#BE123C]">
-                        Mis Recetas Costeadas ({recetas.length})
+                      <span className="text-[#FFE4E9] block text-[11px]">Margen Promedio</span>
+                      <span className="font-nums text-lg font-extrabold text-white">
+                        {estadisticasGenerales.margenPromedio}% de ganancia
                       </span>
-                      <h3 className="font-editorial text-lg sm:text-xl font-bold text-[#2B1118]">
-                        Elegí un producto para ver su masa, su empaque y su precio
-                      </h3>
+                    </div>
+                    <div className="h-7 w-px bg-white/20" />
+                    <div>
+                      <span className="text-[#FFE4E9] block text-[11px]">
+                        Ganancia Promedio por Tanda
+                      </span>
+                      <span className="font-nums text-lg font-extrabold text-[#BBF7D0]">
+                        +{formatearMoneda(estadisticasGenerales.gananciaPromedioLote)}
+                      </span>
+                    </div>
+                    <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTabActiva('insumos');
+                          setAbrirModalInsumoDirecto((n) => n + 1);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white text-[#BE123C] px-3.5 py-2 text-xs font-bold shadow-xs hover:bg-[#FFF0F3] cursor-pointer spring-transition"
+                      >
+                        <Plus size={14} weight="bold" />
+                        <span>Crear Insumo / Empaque</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTabActiva('insumos')}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white/20 text-white px-3.5 py-2 text-xs font-bold hover:bg-white/30 cursor-pointer spring-transition"
+                      >
+                        <span>Ver mis {insumos.length} insumos</span>
+                        <ArrowUpRight size={14} weight="bold" />
+                      </button>
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                    {recetas.map((rec) => {
-                      const res = resumenesPorReceta.get(rec.id);
-                      const seleccionada = rec.id === recetaActiva?.id;
-                      if (!res) return null;
-
-                      return (
-                        <button
-                          key={rec.id}
-                          type="button"
-                          onClick={() => setRecetaActivaId(rec.id)}
-                          className={`text-left rounded-[26px] p-1.5 spring-transition cursor-pointer ${
-                            seleccionada
-                              ? 'bg-gradient-to-br from-[#BE123C] to-[#F43F5E] shadow-[0_14px_30px_-8px_rgba(190,18,60,0.35)] -translate-y-0.5'
-                              : 'bg-[#FCE8EE]/80 hover:bg-[#F9D5E0] border border-[#F3C6D3]'
-                          }`}
-                        >
-                          <div className="rounded-[21px] bg-white p-4 h-full flex flex-col justify-between">
-                            <div>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="rounded-full bg-[#FFE4E9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#BE123C]">
-                                  {rec.categoria}
-                                </span>
-                                <span className="font-nums text-[11px] font-bold text-[#15803D] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
-                                  +{Math.round(res.margenRealPorcentaje)}% margen
-                                </span>
-                              </div>
-                              <h4 className="font-editorial text-base font-bold text-[#2B1118] mt-2 leading-snug">
-                                {rec.nombre}
-                              </h4>
-                            </div>
-
-                            <div className="mt-3 pt-2.5 border-t border-[#F8DCE4] space-y-1 text-xs">
-                              <div className="flex justify-between text-[11px] text-[#7A4957]">
-                                <span>Masa + Cobertura:</span>
-                                <span className="font-nums font-semibold text-[#2B1118]">
-                                  {formatearMoneda(res.costoIngredientesTotal)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between text-[11px] text-[#7A4957]">
-                                <span>Empaque ({rec.nombre_pack}):</span>
-                                <span className="font-nums font-semibold text-[#B91C1C]">
-                                  {formatearMoneda(res.costoEmpaque)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-baseline pt-1">
-                                <span className="text-[11px] font-bold text-[#BE123C]">
-                                  Venta {rec.nombre_pack}:
-                                </span>
-                                <span className="font-nums text-sm font-extrabold text-[#BE123C]">
-                                  {formatearMoneda(res.precioVentaPack)}
-                                </span>
-                              </div>
-                              <div className="flex justify-between items-baseline text-[11px] text-[#15803D] font-bold">
-                                <span>Ganancia por pack:</span>
-                                <span className="font-nums">
-                                  +{formatearMoneda(res.gananciaPorPack)}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
-
-                {/* Panel Detallado de la Receta Seleccionada */}
-                {recetaActiva && (
-                  <RecipeDetailView
-                    receta={recetaActiva}
-                    insumosMap={insumosMap}
-                    onActualizarPrecios={handleActualizarPreciosReceta}
-                    onEditarReceta={(r) => {
-                      setRecetaEnEdicion(r);
-                      setModalRecetaAbierto(true);
-                    }}
-                    onEliminarReceta={handleEliminarReceta}
-                    onCrearPedidoDesdeReceta={handleCrearPedidoDesdeReceta}
-                  />
-                )}
               </div>
-            )}
 
-            {/* ============================================================== */}
-            {/* TAB 2: INSUMOS, MATERIA PRIMA Y EMPAQUES                       */}
-            {/* ============================================================== */}
-            {tabActiva === 'insumos' && (
-              <InsumosView
-                insumos={insumos}
-                onGuardarInsumo={handleGuardarInsumo}
-                onActualizarPrecioRapido={handleActualizarPrecioRapido}
-                onEliminarInsumo={handleEliminarInsumo}
-              />
-            )}
+              {/* Tarjetas Resumen Rápidas de Costos */}
+              <div className="lg:col-span-5 grid grid-cols-2 gap-3.5">
+                <button
+                  type="button"
+                  onClick={() => setTabActiva('insumos')}
+                  className="bezel-shell text-left cursor-pointer hover:-translate-y-0.5"
+                >
+                  <div className="bezel-core p-4 h-full flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-2xl bg-[#FFE4E9] text-[#BE123C] flex items-center justify-center">
+                        <Package size={20} weight="duotone" />
+                      </div>
+                      <span className="rounded-full bg-[#FFE4E9] text-[#BE123C] px-2.5 py-0.5 text-[10px] font-bold">
+                        Ver / Crear +
+                      </span>
+                    </div>
+                    <div className="mt-3">
+                      <div className="font-nums text-2xl font-extrabold text-[#2B1118]">
+                        {insumos.length}
+                      </div>
+                      <div className="text-xs font-bold text-[#2B1118]">
+                        Insumos y Empaques
+                      </div>
+                      <div className="text-[11px] text-[#7A4957] mt-0.5">
+                        Tocá para cargar harinas, cajas o cambiar precios
+                      </div>
+                    </div>
+                  </div>
+                </button>
 
-            {/* ============================================================== */}
-            {/* TAB 3: PEDIDOS, PRESUPUESTADOR Y LISTA DE COMPRAS              */}
-            {/* ============================================================== */}
-            {tabActiva === 'pedidos' && (
-              <PedidosView
-                pedidos={pedidos}
-                recetas={recetas}
-                insumos={insumos}
+                <button
+                  type="button"
+                  onClick={() => setTabActiva('pedidos')}
+                  className="bezel-shell text-left cursor-pointer hover:-translate-y-0.5"
+                >
+                  <div className="bezel-core p-4 h-full flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <div className="w-9 h-9 rounded-2xl bg-[#DCFCE7] text-[#15803D] flex items-center justify-center">
+                        <TrendUp size={20} weight="bold" />
+                      </div>
+                      <span className="rounded-full bg-[#DCFCE7] text-[#15803D] px-2.5 py-0.5 text-[10px] font-bold">
+                        Cotizar +
+                      </span>
+                    </div>
+                    <div className="mt-3">
+                      <div className="font-nums text-2xl font-extrabold text-[#15803D]">
+                        {pedidos.filter((p) => p.estado !== 'entregado').length}
+                      </div>
+                      <div className="text-xs font-bold text-[#2B1118]">
+                        Pedidos en Curso
+                      </div>
+                      <div className="text-[11px] text-[#7A4957] mt-0.5">
+                        Ver agenda y lista de compras
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Selector Visual de Recetas (Tarjetas horizontales interactivas) */}
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-[#BE123C]">
+                    Mis Recetas Costeadas ({recetas.length})
+                  </span>
+                  <h3 className="font-editorial text-lg sm:text-xl font-bold text-[#2B1118]">
+                    Elegí un producto para ver su masa, su empaque y su precio
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecetaEnEdicion(null);
+                    setModalRecetaAbierto(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#BE123C] text-white px-4 py-2 text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Plus size={14} weight="bold" />
+                  <span>Agregar Nueva Receta</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                {recetas.map((rec) => {
+                  const res = resumenesPorReceta.get(rec.id);
+                  const seleccionada = rec.id === recetaActiva?.id;
+                  if (!res) return null;
+
+                  return (
+                    <button
+                      key={rec.id}
+                      type="button"
+                      onClick={() => setRecetaActivaId(rec.id)}
+                      className={`text-left rounded-[26px] p-1.5 spring-transition cursor-pointer ${
+                        seleccionada
+                          ? 'bg-gradient-to-br from-[#BE123C] to-[#F43F5E] shadow-[0_14px_30px_-8px_rgba(190,18,60,0.35)] -translate-y-0.5'
+                          : 'bg-[#FCE8EE]/80 hover:bg-[#F9D5E0] border border-[#F3C6D3]'
+                      }`}
+                    >
+                      <div className="rounded-[21px] bg-white p-4 h-full flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="rounded-full bg-[#FFE4E9] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#BE123C]">
+                              {rec.categoria}
+                            </span>
+                            <span className="font-nums text-[11px] font-bold text-[#15803D] bg-[#DCFCE7] px-2 py-0.5 rounded-full">
+                              +{Math.round(res.margenRealPorcentaje)}% margen
+                            </span>
+                          </div>
+                          <h4 className="font-editorial text-base font-bold text-[#2B1118] mt-2 leading-snug">
+                            {rec.nombre}
+                          </h4>
+                        </div>
+
+                        <div className="mt-3 pt-2.5 border-t border-[#F8DCE4] space-y-1 text-xs">
+                          <div className="flex justify-between text-[11px] text-[#7A4957]">
+                            <span>Masa + Cobertura:</span>
+                            <span className="font-nums font-semibold text-[#2B1118]">
+                              {formatearMoneda(res.costoIngredientesTotal)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-[11px] text-[#7A4957]">
+                            <span>Empaque ({rec.nombre_pack}):</span>
+                            <span className="font-nums font-semibold text-[#B91C1C]">
+                              {formatearMoneda(res.costoEmpaque)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-baseline pt-1">
+                            <span className="text-[11px] font-bold text-[#BE123C]">
+                              Venta {rec.nombre_pack}:
+                            </span>
+                            <span className="font-nums text-sm font-extrabold text-[#BE123C]">
+                              {formatearMoneda(res.precioVentaPack)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-baseline text-[11px] text-[#15803D] font-bold">
+                            <span>Ganancia por pack:</span>
+                            <span className="font-nums">
+                              +{formatearMoneda(res.gananciaPorPack)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Panel Detallado de la Receta Seleccionada */}
+            {recetaActiva && (
+              <RecipeDetailView
+                receta={recetaActiva}
                 insumosMap={insumosMap}
-                onCrearPedido={handleCrearPedido}
-                onCambiarEstadoPedido={handleCambiarEstadoPedido}
-                onEliminarPedido={handleEliminarPedido}
+                onActualizarPrecios={handleActualizarPreciosReceta}
+                onEditarReceta={(r) => {
+                  setRecetaEnEdicion(r);
+                  setModalRecetaAbierto(true);
+                }}
+                onEliminarReceta={handleEliminarReceta}
+                onCrearPedidoDesdeReceta={handleCrearPedidoDesdeReceta}
               />
             )}
-          </>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 2: INSUMOS, MATERIA PRIMA Y EMPAQUES                       */}
+        {/* ============================================================== */}
+        {tabActiva === 'insumos' && (
+          <InsumosView
+            insumos={insumos}
+            abrirNuevoTrigger={abrirModalInsumoDirecto}
+            onGuardarInsumo={handleGuardarInsumo}
+            onActualizarPrecioRapido={handleActualizarPrecioRapido}
+            onEliminarInsumo={handleEliminarInsumo}
+          />
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 3: PEDIDOS, PRESUPUESTADOR Y LISTA DE COMPRAS              */}
+        {/* ============================================================== */}
+        {tabActiva === 'pedidos' && (
+          <PedidosView
+            pedidos={pedidos}
+            recetas={recetas}
+            insumos={insumos}
+            insumosMap={insumosMap}
+            onCrearPedido={handleCrearPedido}
+            onCambiarEstadoPedido={handleCambiarEstadoPedido}
+            onEliminarPedido={handleEliminarPedido}
+          />
         )}
       </main>
 

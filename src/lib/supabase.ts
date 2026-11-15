@@ -25,7 +25,28 @@ const LS_KEY_INSUMOS = 'chefcita_insumos_v2';
 const LS_KEY_RECETAS = 'chefcita_recetas_v2';
 const LS_KEY_PEDIDOS = 'chefcita_pedidos_v2';
 
-function leerCacheLocal(): {
+/**
+ * Ejecuta una promesa de red con un timeout máximo (ej. 2200ms) para que Firebase/Supabase
+ * jamás bloquee la interfaz si Firestore aún no fue habilitado en la consola.
+ */
+function conTimeout<T>(promesa: Promise<T>, ms: number = 2200): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Timeout de red'));
+    }, ms);
+    promesa
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+export function leerCacheLocal(): {
   insumos: Insumo[];
   recetas: Receta[];
   pedidos: Pedido[];
@@ -41,6 +62,10 @@ function leerCacheLocal(): {
     const insumos: Insumo[] = rawIns ? JSON.parse(rawIns) : SEED_INSUMOS;
     const recetasSinVincular: Receta[] = rawRec ? JSON.parse(rawRec) : SEED_RECETAS;
     const pedidos: Pedido[] = rawPed ? JSON.parse(rawPed) : SEED_PEDIDOS;
+
+    if (!rawIns) localStorage.setItem(LS_KEY_INSUMOS, JSON.stringify(SEED_INSUMOS));
+    if (!rawRec) localStorage.setItem(LS_KEY_RECETAS, JSON.stringify(SEED_RECETAS));
+    if (!rawPed) localStorage.setItem(LS_KEY_PEDIDOS, JSON.stringify(SEED_PEDIDOS));
 
     const insumosMap = new Map<string, Insumo>(insumos.map((i) => [i.id, i]));
     const recetas = recetasSinVincular.map((r) => ({
@@ -68,7 +93,7 @@ function guardarCacheLocal(data: {
     if (data.recetas) localStorage.setItem(LS_KEY_RECETAS, JSON.stringify(data.recetas));
     if (data.pedidos) localStorage.setItem(LS_KEY_PEDIDOS, JSON.stringify(data.pedidos));
   } catch {
-    // Ignorar errores de cuota en storage local
+    // Ignorar errores de cuota
   }
 }
 
@@ -85,7 +110,7 @@ async function sembrarFirestoreInicial(): Promise<void> {
     const { items, pasos, ...rest } = rec;
     batch.set(doc(firestoreDb, 'recetas', rec.id), {
       ...rest,
-      items: items.map(({ insumo, ...cleanItem }) => cleanItem),
+      items: items.map(({ insumo: _ins, ...cleanItem }) => cleanItem),
       pasos,
     });
   }
@@ -93,12 +118,11 @@ async function sembrarFirestoreInicial(): Promise<void> {
     batch.set(doc(firestoreDb, 'pedidos', ped.id), ped);
   }
 
-  await batch.commit();
+  await conTimeout(batch.commit(), 2500);
 }
 
 /**
- * Carga todos los datos de Chefcita priorizando Supabase (si está activo),
- * luego Firebase Firestore (`chefcita`), y respaldo instantáneo en LocalStorage.
+ * Carga todos los datos de Chefcita sin bloquear jamás la pantalla.
  */
 export async function cargarDatosChefcita(): Promise<{
   insumos: Insumo[];
@@ -111,31 +135,35 @@ export async function cargarDatosChefcita(): Promise<{
     initFirebaseAnalytics();
   }
 
-  // 1. Si Supabase está configurado (ej. Docker local o Supabase Cloud), intentar primero
+  // 1. Si Supabase está configurado (ej. Docker local), intentar con timeout corto (1.8s)
   if (supabase) {
     try {
-      const [insumosRes, recetasRes, itemsRes, pasosRes, pedidosRes] = await Promise.all([
-        supabase
-          .from('insumos')
-          .select('*')
-          .order('tipo', { ascending: true })
-          .order('nombre', { ascending: true }),
-        supabase
-          .from('recetas')
-          .select('*')
-          .order('favorita', { ascending: false })
-          .order('created_at', { ascending: true }),
-        supabase.from('receta_items').select('*').order('orden', { ascending: true }),
-        supabase.from('receta_pasos').select('*').order('paso_numero', { ascending: true }),
-        supabase.from('pedidos').select('*').order('fecha_entrega', { ascending: true }),
-      ]);
+      const [insumosRes, recetasRes, itemsRes, pasosRes, pedidosRes] = await conTimeout(
+        Promise.all([
+          supabase
+            .from('insumos')
+            .select('*')
+            .order('tipo', { ascending: true })
+            .order('nombre', { ascending: true }),
+          supabase
+            .from('recetas')
+            .select('*')
+            .order('favorita', { ascending: false })
+            .order('created_at', { ascending: true }),
+          supabase.from('receta_items').select('*').order('orden', { ascending: true }),
+          supabase.from('receta_pasos').select('*').order('paso_numero', { ascending: true }),
+          supabase.from('pedidos').select('*').order('fecha_entrega', { ascending: true }),
+        ]),
+        1800
+      );
 
       if (
         !insumosRes.error &&
         !recetasRes.error &&
         !itemsRes.error &&
         !pasosRes.error &&
-        !pedidosRes.error
+        !pedidosRes.error &&
+        (insumosRes.data?.length || 0) > 0
       ) {
         const insumos: Insumo[] = (insumosRes.data || []).map((row) => ({
           ...row,
@@ -214,25 +242,22 @@ export async function cargarDatosChefcita(): Promise<{
     }
   }
 
-  // 2. Intentar cargar desde Firebase Firestore (proyecto "chefcita")
+  // 2. Intentar cargar desde Firebase Firestore con timeout estricto de 2 segundos
   try {
-    const [insSnap, recSnap, pedSnap] = await Promise.all([
-      getDocs(collection(firestoreDb, 'insumos')),
-      getDocs(collection(firestoreDb, 'recetas')),
-      getDocs(collection(firestoreDb, 'pedidos')),
-    ]);
+    const [insSnap, recSnap, pedSnap] = await conTimeout(
+      Promise.all([
+        getDocs(collection(firestoreDb, 'insumos')),
+        getDocs(collection(firestoreDb, 'recetas')),
+        getDocs(collection(firestoreDb, 'pedidos')),
+      ]),
+      2000
+    );
 
     if (insSnap.empty && recSnap.empty) {
-      await sembrarFirestoreInicial();
-      guardarCacheLocal({
-        insumos: SEED_INSUMOS,
-        recetas: SEED_RECETAS,
-        pedidos: SEED_PEDIDOS,
-      });
+      sembrarFirestoreInicial().catch(() => {});
+      const cache = leerCacheLocal();
       return {
-        insumos: SEED_INSUMOS,
-        recetas: SEED_RECETAS,
-        pedidos: SEED_PEDIDOS,
+        ...cache,
         conectadoASupabase: true,
         motorActivo: 'Firebase',
       };
@@ -281,7 +306,7 @@ export async function cargarDatosChefcita(): Promise<{
       motorActivo: 'Firebase',
     };
   } catch {
-    // 3. Respaldo en LocalStorage con las 4 recetas y 27 insumos completos
+    // 3. Respuesta inmediata desde LocalStorage (con los 27 insumos y 4 recetas completas)
     const cache = leerCacheLocal();
     return {
       ...cache,
@@ -292,7 +317,7 @@ export async function cargarDatosChefcita(): Promise<{
 }
 
 // ============================================================================
-// OPERACIONES CRUD (SINCRONIZADAS CON SUPABASE + FIREBASE + CACHE LOCAL)
+// OPERACIONES CRUD INSTANTÁNEAS (0ms en UI + sincronización en background)
 // ============================================================================
 
 export async function guardarInsumoDB(
@@ -314,34 +339,26 @@ export async function guardarInsumoDB(
     updated_at: new Date().toISOString(),
   };
 
-  // Actualizar cache local inmediatamente
+  // 1. Guardar instantáneamente en cache local
   const cache = leerCacheLocal();
   const existe = cache.insumos.some((i) => i.id === id);
   const nuevosInsumos = existe
     ? cache.insumos.map((i) => (i.id === id ? payload : i))
-    : [...cache.insumos, payload];
+    : [payload, ...cache.insumos];
   guardarCacheLocal({ insumos: nuevosInsumos });
 
-  // Guardar en Supabase si está activo
+  // 2. Sincronizar en background con Supabase y Firebase (sin bloquear la UI)
   if (supabase) {
-    try {
-      const { id: _omit, ...dbRow } = payload;
-      if (insumo.id) {
-        await supabase.from('insumos').update(dbRow).eq('id', id);
-      } else {
-        await supabase.from('insumos').insert({ id, ...dbRow });
-      }
-    } catch {
-      // Continuar
-    }
+    const { id: _omit, ...dbRow } = payload;
+    const op = insumo.id
+      ? supabase.from('insumos').update(dbRow).eq('id', id)
+      : supabase.from('insumos').insert({ id, ...dbRow });
+    Promise.resolve(op).catch(() => {});
   }
 
-  // Guardar en Firebase Firestore
-  try {
-    await setDoc(doc(firestoreDb, 'insumos', id), payload, { merge: true });
-  } catch {
-    // Ya persistido en cache local
-  }
+  conTimeout(setDoc(doc(firestoreDb, 'insumos', id), payload, { merge: true }), 2000).catch(
+    () => {}
+  );
 
   return payload;
 }
@@ -375,18 +392,10 @@ export async function actualizarPrecioInsumoDB(
   guardarCacheLocal({ insumos: nuevosInsumos });
 
   if (supabase) {
-    try {
-      await supabase.from('insumos').update(updateData).eq('id', id);
-    } catch {
-      // Continuar
-    }
+    Promise.resolve(supabase.from('insumos').update(updateData).eq('id', id)).catch(() => {});
   }
 
-  try {
-    await updateDoc(doc(firestoreDb, 'insumos', id), updateData);
-  } catch {
-    // Ya persistido en cache local
-  }
+  conTimeout(updateDoc(doc(firestoreDb, 'insumos', id), updateData), 2000).catch(() => {});
 }
 
 export async function eliminarInsumoDB(id: string): Promise<void> {
@@ -396,18 +405,10 @@ export async function eliminarInsumoDB(id: string): Promise<void> {
   });
 
   if (supabase) {
-    try {
-      await supabase.from('insumos').delete().eq('id', id);
-    } catch {
-      // Continuar
-    }
+    Promise.resolve(supabase.from('insumos').delete().eq('id', id)).catch(() => {});
   }
 
-  try {
-    await deleteDoc(doc(firestoreDb, 'insumos', id));
-  } catch {
-    // Ya eliminado en cache local
-  }
+  conTimeout(deleteDoc(doc(firestoreDb, 'insumos', id)), 2000).catch(() => {});
 }
 
 export async function actualizarPreciosVentaRecetaDB(
@@ -427,27 +428,24 @@ export async function actualizarPreciosVentaRecetaDB(
   guardarCacheLocal({ recetas: nuevasRecetas });
 
   if (supabase) {
-    try {
-      await supabase
+    Promise.resolve(
+      supabase
         .from('recetas')
         .update({
           ...precios,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', recetaId);
-    } catch {
-      // Continuar
-    }
+        .eq('id', recetaId)
+    ).catch(() => {});
   }
 
-  try {
-    await updateDoc(doc(firestoreDb, 'recetas', recetaId), {
+  conTimeout(
+    updateDoc(doc(firestoreDb, 'recetas', recetaId), {
       ...precios,
       updated_at: new Date().toISOString(),
-    });
-  } catch {
-    // Ya persistido en cache local
-  }
+    }),
+    2000
+  ).catch(() => {});
 }
 
 export async function guardarRecetaCompletaDB(
@@ -505,17 +503,15 @@ export async function guardarRecetaCompletaDB(
     updated_at: new Date().toISOString(),
   };
 
-  // Actualizar cache local
   const cache = leerCacheLocal();
   const existe = cache.recetas.some((r) => r.id === recetaId);
   const nuevasRecetas = existe
     ? cache.recetas.map((r) => (r.id === recetaId ? recetaCompleta : r))
-    : [...cache.recetas, recetaCompleta];
+    : [recetaCompleta, ...cache.recetas];
   guardarCacheLocal({ recetas: nuevasRecetas });
 
-  // Guardar en Supabase si está activo
   if (supabase) {
-    try {
+    (async () => {
       const { id: _omit, items: _it, pasos: _pa, ...recetaPayload } = recetaCompleta;
       if (receta.id) {
         await supabase.from('recetas').update(recetaPayload).eq('id', recetaId);
@@ -525,24 +521,20 @@ export async function guardarRecetaCompletaDB(
         await supabase.from('recetas').insert({ id: recetaId, ...recetaPayload });
       }
       if (itemsConId.length > 0) {
-        await supabase.from('receta_items').insert(
-          itemsConId.map(({ insumo: _ins, ...rest }) => rest)
-        );
+        await supabase
+          .from('receta_items')
+          .insert(itemsConId.map(({ insumo: _ins, ...rest }) => rest));
       }
       if (pasosConId.length > 0) {
         await supabase.from('receta_pasos').insert(pasosConId);
       }
-    } catch {
-      // Continuar
-    }
+    })().catch(() => {});
   }
 
-  // Guardar en Firebase Firestore
-  try {
-    await setDoc(doc(firestoreDb, 'recetas', recetaId), recetaCompleta, { merge: true });
-  } catch {
-    // Ya persistido en cache local
-  }
+  conTimeout(
+    setDoc(doc(firestoreDb, 'recetas', recetaId), recetaCompleta, { merge: true }),
+    2000
+  ).catch(() => {});
 
   return recetaId;
 }
@@ -554,18 +546,10 @@ export async function eliminarRecetaDB(id: string): Promise<void> {
   });
 
   if (supabase) {
-    try {
-      await supabase.from('recetas').delete().eq('id', id);
-    } catch {
-      // Continuar
-    }
+    Promise.resolve(supabase.from('recetas').delete().eq('id', id)).catch(() => {});
   }
 
-  try {
-    await deleteDoc(doc(firestoreDb, 'recetas', id));
-  } catch {
-    // Ya eliminado en cache local
-  }
+  conTimeout(deleteDoc(doc(firestoreDb, 'recetas', id)), 2000).catch(() => {});
 }
 
 export async function guardarPedidoDB(
@@ -592,27 +576,20 @@ export async function guardarPedidoDB(
   const existe = cache.pedidos.some((p) => p.id === id);
   const nuevosPedidos = existe
     ? cache.pedidos.map((p) => (p.id === id ? payload : p))
-    : [...cache.pedidos, payload];
+    : [payload, ...cache.pedidos];
   guardarCacheLocal({ pedidos: nuevosPedidos });
 
   if (supabase) {
-    try {
-      const { id: _omit, ...dbRow } = payload;
-      if (pedido.id) {
-        await supabase.from('pedidos').update(dbRow).eq('id', id);
-      } else {
-        await supabase.from('pedidos').insert({ id, ...dbRow });
-      }
-    } catch {
-      // Continuar
-    }
+    const { id: _omit, ...dbRow } = payload;
+    const op = pedido.id
+      ? supabase.from('pedidos').update(dbRow).eq('id', id)
+      : supabase.from('pedidos').insert({ id, ...dbRow });
+    Promise.resolve(op).catch(() => {});
   }
 
-  try {
-    await setDoc(doc(firestoreDb, 'pedidos', id), payload, { merge: true });
-  } catch {
-    // Ya persistido en cache local
-  }
+  conTimeout(setDoc(doc(firestoreDb, 'pedidos', id), payload, { merge: true }), 2000).catch(
+    () => {}
+  );
 
   return payload;
 }
@@ -627,18 +604,10 @@ export async function cambiarEstadoPedidoDB(
   });
 
   if (supabase) {
-    try {
-      await supabase.from('pedidos').update({ estado }).eq('id', id);
-    } catch {
-      // Continuar
-    }
+    Promise.resolve(supabase.from('pedidos').update({ estado }).eq('id', id)).catch(() => {});
   }
 
-  try {
-    await updateDoc(doc(firestoreDb, 'pedidos', id), { estado });
-  } catch {
-    // Ya persistido en cache local
-  }
+  conTimeout(updateDoc(doc(firestoreDb, 'pedidos', id), { estado }), 2000).catch(() => {});
 }
 
 export async function eliminarPedidoDB(id: string): Promise<void> {
@@ -648,16 +617,8 @@ export async function eliminarPedidoDB(id: string): Promise<void> {
   });
 
   if (supabase) {
-    try {
-      await supabase.from('pedidos').delete().eq('id', id);
-    } catch {
-      // Continuar
-    }
+    Promise.resolve(supabase.from('pedidos').delete().eq('id', id)).catch(() => {});
   }
 
-  try {
-    await deleteDoc(doc(firestoreDb, 'pedidos', id));
-  } catch {
-    // Ya eliminado en cache local
-  }
+  conTimeout(deleteDoc(doc(firestoreDb, 'pedidos', id)), 2000).catch(() => {});
 }
