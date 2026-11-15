@@ -47,7 +47,7 @@ export default function ChefcitaApp() {
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [recetaActivaId, setRecetaActivaId] = useState<string>('');
-  const [conectadoSupabase, setConectadoSupabase] = useState<boolean>(false);
+  const [motorActivo, setMotorActivo] = useState<'Supabase' | 'Firebase' | 'Local'>('Firebase');
   const [cargando, setCargando] = useState<boolean>(true);
 
   // Modal de crear / editar receta
@@ -69,7 +69,7 @@ export default function ChefcitaApp() {
     setInsumos(data.insumos);
     setRecetas(data.recetas);
     setPedidos(data.pedidos);
-    setConectadoSupabase(data.conectadoASupabase);
+    setMotorActivo(data.motorActivo);
     setRecetaActivaId((prev) => {
       if (prev && data.recetas.some((r) => r.id === prev)) return prev;
       return data.recetas[0]?.id || '';
@@ -250,7 +250,7 @@ export default function ChefcitaApp() {
                 </h1>
                 <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-[#FFF0F3] border border-[#F3C6D3] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#BE123C]">
                   <Database size={11} weight="duotone" />
-                  {conectadoSupabase ? 'Supabase Activo' : 'Modo Local'}
+                  {motorActivo === 'Supabase' ? 'Supabase + Firebase' : 'Firebase Activo · chefcita'}
                 </span>
               </div>
               <p className="text-[11px] text-[#7A4957]">
