@@ -1,102 +1,108 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Insumo,
-  Receta,
-  ResumenCostosReceta,
-} from '@/lib/types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Insumo, Receta, DesgloseItemCosto } from '@/lib/types';
 import {
   calcularCostosReceta,
   formatearMoneda,
   formatearCantidad,
+  precioParaMargen,
   redondearPrecioComercial,
+  singular,
 } from '@/lib/costing';
+import { CampoDinero, Segmentos, Etiqueta, Confirmar, Tono } from './ui';
 import {
-  CookingPot,
-  Package,
-  CurrencyDollar,
-  Sparkle,
-  Timer,
-  CheckCircle,
-  Circle,
-  Fire,
-  Scales,
-  TrendUp,
-  WarningCircle,
+  ArrowLeft,
   PencilSimple,
   Trash,
+  Plus,
+  Timer,
   Play,
   Pause,
-  ArrowCounterClockwise,
-  Heart,
-  SlidersHorizontal,
-  ArrowUpRight,
-  FloppyDisk,
-  Info,
+  X,
+  CheckCircle,
+  Circle,
+  Check,
 } from '@phosphor-icons/react';
 
 interface RecipeDetailViewProps {
   receta: Receta;
   insumosMap: Map<string, Insumo>;
+  onVolver: () => void;
   onActualizarPrecios: (
     recetaId: string,
     precios: {
       precio_venta_pack: number;
       precio_venta_unidad: number;
       precio_venta_lote: number;
-      margen_objetivo_porcentaje?: number;
-      porcentaje_gastos_extras?: number;
     }
   ) => Promise<void>;
   onEditarReceta: (receta: Receta) => void;
   onEliminarReceta: (recetaId: string) => Promise<void>;
-  onCrearPedidoDesdeReceta: (receta: Receta, factorEscala: number, resumen: ResumenCostosReceta) => void;
+  onNuevoPedido: (receta: Receta) => void;
+}
+
+export const TONO_SALUD: Record<string, Tono> = {
+  perdida: 'bad',
+  bajo: 'warn',
+  correcto: 'ok',
+  excelente: 'ok',
+};
+
+export const TEXTO_SALUD: Record<string, string> = {
+  perdida: 'Pierdes dinero',
+  bajo: 'Ganancia baja',
+  correcto: 'Buen precio',
+  excelente: 'Muy buen precio',
+};
+
+const COLOR_TEXTO: Record<Tono, string> = {
+  ok: 'text-ok',
+  warn: 'text-warn',
+  bad: 'text-bad',
+  neutro: 'text-ink',
+  berry: 'text-berry',
+};
+
+function formatearTiempo(seg: number) {
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 export default function RecipeDetailView({
   receta,
   insumosMap,
+  onVolver,
   onActualizarPrecios,
   onEditarReceta,
   onEliminarReceta,
-  onCrearPedidoDesdeReceta,
+  onNuevoPedido,
 }: RecipeDetailViewProps) {
-  const [subTab, setSubTab] = useState<'costos' | 'preparar'>('costos');
-  const [factorEscala, setFactorEscala] = useState<number>(1);
-  const [unidadesPersonalizadas, setUnidadesPersonalizadas] = useState<string>('');
+  const [pestana, setPestana] = useState<'precio' | 'preparar'>('precio');
+  const [precioEdit, setPrecioEdit] = useState(String(receta.precio_venta_pack || ''));
+  const [guardando, setGuardando] = useState(false);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
 
-  // Estados del simulador interactivo de precio de venta en vivo
-  const [precioPackEdit, setPrecioPackEdit] = useState<number>(receta.precio_venta_pack);
-  const [precioUnidadEdit, setPrecioUnidadEdit] = useState<number>(receta.precio_venta_unidad);
-  const [gastosExtrasEdit, setGastosExtrasEdit] = useState<number>(receta.porcentaje_gastos_extras);
-  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
-  const [mensajeGuardado, setMensajeGuardado] = useState(false);
+  // Modo preparar
+  const [veces, setVeces] = useState(1);
+  const [marcados, setMarcados] = useState<Record<string, boolean>>({});
+  const [pasosHechos, setPasosHechos] = useState<Record<string, boolean>>({});
+  const [timerPaso, setTimerPaso] = useState<string | null>(null);
+  const [timerSeg, setTimerSeg] = useState(0);
+  const [timerCorriendo, setTimerCorriendo] = useState(false);
 
-  // Estados para Modo Preparar (checklist de ingredientes + pasos + timer de cocina)
-  const [ingredientesMarcados, setIngredientesMarcados] = useState<Record<string, boolean>>({});
-  const [pasosMarcados, setPasosMarcados] = useState<Record<string, boolean>>({});
-  const [timerActivoPasoId, setTimerActivoPasoId] = useState<string | null>(null);
-  const [timerSegundosRestantes, setTimerSegundosRestantes] = useState<number>(0);
-  const [timerCorriendo, setTimerCorriendo] = useState<boolean>(false);
-  const [timerEtiqueta, setTimerEtiqueta] = useState<string>('');
+  // Si el precio guardado cambia (por ejemplo al editar el producto), el campo lo refleja
+  const [precioGuardado, setPrecioGuardado] = useState(receta.precio_venta_pack);
+  if (precioGuardado !== receta.precio_venta_pack) {
+    setPrecioGuardado(receta.precio_venta_pack);
+    setPrecioEdit(String(receta.precio_venta_pack || ''));
+  }
 
-  // Sincronizar cuando cambia la receta seleccionada
   useEffect(() => {
-    setPrecioPackEdit(receta.precio_venta_pack);
-    setPrecioUnidadEdit(receta.precio_venta_unidad);
-    setGastosExtrasEdit(receta.porcentaje_gastos_extras);
-    setFactorEscala(1);
-    setUnidadesPersonalizadas('');
-    setIngredientesMarcados({});
-    setPasosMarcados({});
-  }, [receta.id, receta.precio_venta_pack, receta.precio_venta_unidad, receta.porcentaje_gastos_extras]);
-
-  // Efecto del Temporizador de Cocina
-  useEffect(() => {
-    if (!timerCorriendo || timerSegundosRestantes <= 0) return;
-    const interval = setInterval(() => {
-      setTimerSegundosRestantes((prev) => {
+    if (!timerCorriendo) return;
+    const intervalo = setInterval(() => {
+      setTimerSeg((prev) => {
         if (prev <= 1) {
           setTimerCorriendo(false);
           return 0;
@@ -104,1067 +110,566 @@ export default function RecipeDetailView({
         return prev - 1;
       });
     }, 1000);
-    return () => clearInterval(interval);
-  }, [timerCorriendo, timerSegundosRestantes]);
+    return () => clearInterval(intervalo);
+  }, [timerCorriendo]);
 
-  // Receta virtual con los precios editados en vivo para ver el diagnóstico instantáneo
-  const recetaSimulada = useMemo<Receta>(() => {
-    const packsPorLote =
-      receta.unidades_por_pack > 0 ? receta.rendimiento_cantidad / receta.unidades_por_pack : 1;
-    return {
+  const unidPack = Math.max(1, receta.unidades_por_pack || 1);
+  const vendeEnPack = unidPack > 1;
+  const packsPorPreparacion = receta.rendimiento_cantidad / unidPack;
+  const precioNum = Number(precioEdit) || 0;
+  const unidad = singular(receta.rendimiento_unidad);
+  const nombreVenta = vendeEnPack ? receta.nombre_pack : unidad;
+
+  const recetaSimulada = useMemo<Receta>(
+    () => ({
       ...receta,
-      porcentaje_gastos_extras: gastosExtrasEdit,
-      precio_venta_pack: precioPackEdit,
-      precio_venta_unidad: precioUnidadEdit,
-      precio_venta_lote: Math.round(precioPackEdit * packsPorLote),
-    };
-  }, [receta, precioPackEdit, precioUnidadEdit, gastosExtrasEdit]);
-
-  const resumen = useMemo(
-    () => calcularCostosReceta(recetaSimulada, insumosMap, factorEscala),
-    [recetaSimulada, insumosMap, factorEscala]
+      precio_venta_pack: precioNum,
+      precio_venta_unidad: vendeEnPack ? redondearPrecioComercial(precioNum / unidPack) : precioNum,
+      precio_venta_lote: Math.round(precioNum * packsPorPreparacion),
+    }),
+    [receta, precioNum, vendeEnPack, unidPack, packsPorPreparacion]
   );
 
-  // Porcentajes para la barra visual de costos vs ganancia
-  const porcentajeMasaSobreVenta =
-    resumen.precioVentaLote > 0
-      ? Math.min(Math.max((resumen.costoMasa / resumen.precioVentaLote) * 100, 3), 100)
-      : 25;
-  const porcentajeRellenoSobreVenta =
-    resumen.precioVentaLote > 0
-      ? Math.min(Math.max((resumen.costoRellenoCobertura / resumen.precioVentaLote) * 100, 3), 100)
-      : 20;
-  const porcentajeEmpaqueSobreVenta =
-    resumen.precioVentaLote > 0
-      ? Math.min(Math.max((resumen.costoEmpaque / resumen.precioVentaLote) * 100, 3), 100)
-      : 15;
-  const porcentajeExtrasSobreVenta =
-    resumen.precioVentaLote > 0
-      ? Math.min(Math.max((resumen.costoGastosExtras / resumen.precioVentaLote) * 100, 2), 100)
-      : 5;
-  const porcentajeGananciaSobreVenta = Math.max(
-    0,
-    100 -
-      (porcentajeMasaSobreVenta +
-        porcentajeRellenoSobreVenta +
-        porcentajeEmpaqueSobreVenta +
-        porcentajeExtrasSobreVenta)
+  const r = useMemo(
+    () => calcularCostosReceta(recetaSimulada, insumosMap, 1),
+    [recetaSimulada, insumosMap]
+  );
+  const rPreparar = useMemo(
+    () => calcularCostosReceta(receta, insumosMap, veces),
+    [receta, insumosMap, veces]
   );
 
-  const handleCambiarPrecioPack = (nuevoValorPack: number) => {
-    const limpio = Math.max(0, Math.round(nuevoValorPack));
-    setPrecioPackEdit(limpio);
-    if (receta.unidades_por_pack > 0) {
-      setPrecioUnidadEdit(redondearPrecioComercial(limpio / receta.unidades_por_pack));
-    }
-  };
+  const sinCosto = r.costoTotalLote <= 0;
+  const tono: Tono = sinCosto ? 'neutro' : TONO_SALUD[r.estadoSalud];
+  const precioCambiado = precioNum !== (receta.precio_venta_pack || 0) && precioNum > 0;
 
-  const handleAplicarMultiplicador = (mult: number) => {
-    const costoPackBase = resumen.costoPorPack / (factorEscala > 0 ? 1 : 1);
-    const sugerido = redondearPrecioComercial(costoPackBase * mult);
-    handleCambiarPrecioPack(sugerido);
-  };
+  const sugerencias = [
+    { nombre: 'Ajustado', precio: precioParaMargen(r.costoPorPack, 45) },
+    { nombre: 'Recomendado', precio: precioParaMargen(r.costoPorPack, 60) },
+    { nombre: 'Premium', precio: precioParaMargen(r.costoPorPack, 70) },
+  ];
 
-  const handleGuardarPrecios = async () => {
-    setGuardandoPrecio(true);
+  const guardarPrecio = async () => {
+    setGuardando(true);
     try {
-      const packsPorLote =
-        receta.unidades_por_pack > 0 ? receta.rendimiento_cantidad / receta.unidades_por_pack : 1;
       await onActualizarPrecios(receta.id, {
-        precio_venta_pack: precioPackEdit,
-        precio_venta_unidad: precioUnidadEdit,
-        precio_venta_lote: Math.round(precioPackEdit * packsPorLote),
-        porcentaje_gastos_extras: gastosExtrasEdit,
+        precio_venta_pack: recetaSimulada.precio_venta_pack,
+        precio_venta_unidad: recetaSimulada.precio_venta_unidad,
+        precio_venta_lote: recetaSimulada.precio_venta_lote,
       });
-      setMensajeGuardado(true);
-      setTimeout(() => setMensajeGuardado(false), 2500);
     } finally {
-      setGuardandoPrecio(false);
+      setGuardando(false);
     }
   };
 
-  const iniciarTimerPaso = (pasoId: string, minutos: number, etapa: string) => {
-    setTimerActivoPasoId(pasoId);
-    setTimerSegundosRestantes(minutos * 60);
-    setTimerEtiqueta(etapa);
-    setTimerCorriendo(true);
-  };
+  // Reparto de cada venta
+  const venta = Math.max(r.precioVentaLote, r.costoTotalLote, 1);
+  const partes = [
+    { nombre: 'Ingredientes', valor: r.costoIngredientesTotal, color: 'bg-ink' },
+    { nombre: 'Envases', valor: r.costoEmpaque, color: 'bg-ink/55' },
+    { nombre: 'Gas, luz y otros', valor: r.costoGastosExtras + r.costoManoObra, color: 'bg-ink/25' },
+    { nombre: 'Tu ganancia', valor: Math.max(0, r.gananciaPorLote), color: 'bg-ok' },
+  ].filter((p) => p.valor > 0);
 
-  const formatearSegundos = (seg: number) => {
-    const m = Math.floor(seg / 60);
-    const s = seg % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
+  const grupos: Array<{ titulo: string; lista: DesgloseItemCosto[]; total: number }> = [
+    { titulo: 'Masa o base', lista: r.itemsMasa, total: r.costoMasa },
+    { titulo: 'Relleno, cobertura y decoración', lista: r.itemsRelleno, total: r.costoRellenoCobertura },
+    { titulo: 'Envases y empaque', lista: r.itemsEmpaque, total: r.costoEmpaque },
+  ].filter((g) => g.lista.length > 0);
 
-  const totalIngredientesCount = receta.items.length;
-  const ingredientesCompletadosCount = Object.values(ingredientesMarcados).filter(Boolean).length;
-  const totalPasosCount = receta.pasos.length;
-  const pasosCompletadosCount = Object.values(pasosMarcados).filter(Boolean).length;
+  const gruposPreparar = [
+    { titulo: 'Masa o base', lista: rPreparar.itemsMasa },
+    { titulo: 'Relleno, cobertura y decoración', lista: rPreparar.itemsRelleno },
+    { titulo: 'Envases y empaque', lista: rPreparar.itemsEmpaque },
+  ].filter((g) => g.lista.length > 0);
+
+  const filas = [
+    {
+      nombre: `Por ${unidad}`,
+      costo: r.costoPorUnidad,
+      venta: r.precioVentaPack / unidPack,
+      gana: r.gananciaPorPack / unidPack,
+    },
+    ...(vendeEnPack
+      ? [
+          {
+            nombre: `Por ${receta.nombre_pack}`,
+            costo: r.costoPorPack,
+            venta: r.precioVentaPack,
+            gana: r.gananciaPorPack,
+          },
+        ]
+      : []),
+    {
+      nombre: `Por los ${receta.rendimiento_cantidad} ${receta.rendimiento_unidad}`,
+      costo: r.costoTotalLote,
+      venta: r.precioVentaLote,
+      gana: r.gananciaPorLote,
+    },
+  ];
 
   return (
-    <div className="space-y-5">
-      {/* Encabezado Principal de la Receta Activa */}
-      <div className="bezel-shell">
-        <div className="bezel-core p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFE4E9] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#BE123C]">
-                  <Sparkle size={13} weight="fill" />
-                  {receta.categoria}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF0F3] px-3 py-1 text-xs font-medium text-[#7A4957]">
-                  Rinde <strong className="font-nums text-[#2B1118]">{resumen.rendimientoEscalado}</strong>{' '}
-                  {receta.rendimiento_unidad}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#FFF0F3] px-3 py-1 text-xs font-medium text-[#7A4957]">
-                  <Fire size={14} weight="duotone" className="text-[#E11D48]" />
-                  {receta.metodo_coccion} {receta.temperatura_horno_c > 0 ? `· ${receta.temperatura_horno_c}°C` : ''}
-                </span>
-              </div>
-              <h2 className="font-editorial text-2xl sm:text-3xl font-bold text-[#2B1118]">
-                {receta.nombre}
-              </h2>
-              <p className="text-sm text-[#7A4957] max-w-2xl leading-relaxed">
-                {receta.descripcion}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onEditarReceta(receta)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF0F3] hover:bg-[#FFE0E7] active:scale-[0.98] px-4 py-2 text-xs font-semibold text-[#BE123C] spring-transition cursor-pointer"
-              >
-                <PencilSimple size={15} weight="duotone" />
-                Editar receta
-              </button>
-              <button
-                type="button"
-                onClick={() => onEliminarReceta(receta.id)}
-                title="Eliminar receta"
-                className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#FFF0F3] hover:bg-[#FFE0E7] text-[#9F1239] active:scale-[0.96] spring-transition cursor-pointer"
-              >
-                <Trash size={16} weight="light" />
-              </button>
-            </div>
+    <div className="space-y-6">
+      <div>
+        <button
+          type="button"
+          onClick={onVolver}
+          className="-ml-2 inline-flex min-h-[40px] cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[0.9375rem] font-semibold text-ink-soft hover:text-ink"
+        >
+          <ArrowLeft size={18} weight="bold" />
+          Productos
+        </button>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <h1 className="font-display text-[1.75rem] font-semibold leading-tight sm:text-[2rem]">
+              {receta.nombre}
+            </h1>
+            <p className="mt-1 text-[0.9375rem] text-ink-soft">
+              Salen {receta.rendimiento_cantidad} {receta.rendimiento_unidad} cada vez
+              {vendeEnPack ? ` · se vende en ${receta.nombre_pack}` : ' · se vende de a uno'}
+            </p>
           </div>
-
-          {/* Selector de Escala / Tanda en 1 toque */}
-          <div className="mt-5 pt-4 border-t border-[#F8DCE4] flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Scales size={18} weight="duotone" className="text-[#E11D48]" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-[#7A4957]">
-                Tamaño de tanda (escala):
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {[
-                { label: '½ Lote', val: 0.5 },
-                { label: '1 Lote base', val: 1 },
-                { label: '1.5x', val: 1.5 },
-                { label: 'Doble (2x)', val: 2 },
-                { label: 'Triple (3x)', val: 3 },
-              ].map((op) => {
-                const activo = Math.abs(factorEscala - op.val) < 0.01 && unidadesPersonalizadas === '';
-                return (
-                  <button
-                    key={op.val}
-                    type="button"
-                    onClick={() => {
-                      setFactorEscala(op.val);
-                      setUnidadesPersonalizadas('');
-                    }}
-                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold spring-transition cursor-pointer ${
-                      activo
-                        ? 'bg-[#BE123C] text-white shadow-sm'
-                        : 'bg-[#FFF0F3] text-[#7A4957] hover:bg-[#FFE4E9] hover:text-[#2B1118]'
-                    }`}
-                  >
-                    {op.label} ({Math.round(receta.rendimiento_cantidad * op.val)} {receta.rendimiento_unidad})
-                  </button>
-                );
-              })}
-
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF0F3] px-3 py-1 border border-[#F3C6D3]">
-                <span className="text-[11px] font-medium text-[#7A4957]">Exactas:</span>
-                <input
-                  type="number"
-                  min={1}
-                  placeholder={String(receta.rendimiento_cantidad)}
-                  value={unidadesPersonalizadas}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setUnidadesPersonalizadas(val);
-                    const num = Number(val);
-                    if (num > 0 && receta.rendimiento_cantidad > 0) {
-                      setFactorEscala(num / receta.rendimiento_cantidad);
-                    } else {
-                      setFactorEscala(1);
-                    }
-                  }}
-                  className="w-14 text-center font-nums text-xs font-bold text-[#BE123C] bg-white rounded-full py-0.5 px-1.5 focus:outline-none focus:ring-1 focus:ring-[#E11D48]"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Sub-Navegación: Costos y Precio vs Modo Preparar */}
-          <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-[#FDF2F5] p-1.5 border border-[#F5D0DC]">
-            <button
-              type="button"
-              onClick={() => setSubTab('costos')}
-              className={`flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs sm:text-sm font-bold spring-transition cursor-pointer ${
-                subTab === 'costos'
-                  ? 'bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white shadow-md'
-                  : 'text-[#7A4957] hover:text-[#2B1118]'
-              }`}
-            >
-              <CurrencyDollar size={18} weight="bold" />
-              <span>Costos, Empaque y Precio</span>
+          <div className="flex gap-3">
+            <button type="button" className="btn btn-secondary" onClick={() => onEditarReceta(receta)}>
+              <PencilSimple size={18} />
+              Editar
             </button>
-            <button
-              type="button"
-              onClick={() => setSubTab('preparar')}
-              className={`flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs sm:text-sm font-bold spring-transition cursor-pointer ${
-                subTab === 'preparar'
-                  ? 'bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white shadow-md'
-                  : 'text-[#7A4957] hover:text-[#2B1118]'
-              }`}
-            >
-              <CookingPot size={18} weight="duotone" />
-              <span>Modo Preparar y Pasos ({receta.pasos.length})</span>
+            <button type="button" className="btn btn-primary" onClick={() => onNuevoPedido(receta)}>
+              <Plus size={18} weight="bold" />
+              Nuevo pedido
             </button>
           </div>
         </div>
       </div>
 
-      {/* ==================================================================== */}
-      {/* VISTA 1: COSTOS DE MASA, RELLENO, EMPAQUE Y SIMULADOR DE PRECIO      */}
-      {/* ==================================================================== */}
-      {subTab === 'costos' && (
-        <div className="space-y-5">
-          {/* 4 Tarjetas Clave del Desglose (Masa | Cobertura/Relleno | Empaque | Costo Total) */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-            {/* 1. Costo de la Masa */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-4 h-full flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#9F1239]">
-                    1. Costo de Masa
-                  </span>
-                  <span className="w-7 h-7 rounded-full bg-[#FFE4E9] text-[#BE123C] flex items-center justify-center">
-                    <CookingPot size={15} weight="duotone" />
-                  </span>
-                </div>
-                <div className="my-2">
-                  <div className="font-nums text-xl sm:text-2xl font-bold text-[#2B1118]">
-                    {formatearMoneda(resumen.costoMasa)}
-                  </div>
-                  <div className="text-xs text-[#7A4957] mt-0.5">
-                    <span className="font-nums font-semibold text-[#BE123C]">
-                      {formatearMoneda(resumen.costoMasaPorUnidad)}
-                    </span>{' '}
-                    por cada {receta.rendimiento_unidad.replace(/s$/, '')}
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#7A4957] bg-[#FFF5F7] rounded-xl px-2.5 py-1.5">
-                  {resumen.itemsMasa.length} insumos en la masa base
-                </div>
-              </div>
-            </div>
+      <Segmentos
+        className="sm:w-96"
+        opciones={[
+          { id: 'precio', etiqueta: 'Precio y ganancia' },
+          { id: 'preparar', etiqueta: 'Preparar' },
+        ]}
+        valor={pestana}
+        onChange={setPestana}
+      />
 
-            {/* 2. Costo de Relleno / Cobertura */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-4 h-full flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#C2185B]">
-                    2. Baño y Relleno
-                  </span>
-                  <span className="w-7 h-7 rounded-full bg-[#FCE7F3] text-[#BE185D] flex items-center justify-center">
-                    <Heart size={15} weight="duotone" />
-                  </span>
-                </div>
-                <div className="my-2">
-                  <div className="font-nums text-xl sm:text-2xl font-bold text-[#2B1118]">
-                    {formatearMoneda(resumen.costoRellenoCobertura)}
-                  </div>
-                  <div className="text-xs text-[#7A4957] mt-0.5">
-                    <span className="font-nums font-semibold text-[#BE185D]">
-                      {formatearMoneda(resumen.costoRellenoPorUnidad)}
-                    </span>{' '}
-                    por unidad
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#7A4957] bg-[#FDF2F8] rounded-xl px-2.5 py-1.5">
-                  {resumen.itemsRelleno.length} insumos de decoración/relleno
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Costo de Empaque */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-4 h-full flex flex-col justify-between">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#B91C1C]">
-                    3. Costo Empaque
-                  </span>
-                  <span className="w-7 h-7 rounded-full bg-[#FEE2E2] text-[#B91C1C] flex items-center justify-center">
-                    <Package size={15} weight="duotone" />
-                  </span>
-                </div>
-                <div className="my-2">
-                  <div className="font-nums text-xl sm:text-2xl font-bold text-[#2B1118]">
-                    {formatearMoneda(resumen.costoEmpaque)}
-                  </div>
-                  <div className="text-xs text-[#7A4957] mt-0.5">
-                    <span className="font-nums font-semibold text-[#B91C1C]">
-                      {formatearMoneda(
-                        resumen.cantidadPacksEnLote > 0
-                          ? resumen.costoEmpaque / resumen.cantidadPacksEnLote
-                          : resumen.costoEmpaque
-                      )}
-                    </span>{' '}
-                    por {receta.nombre_pack.toLowerCase()}
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#7A4957] bg-[#FEF2F2] rounded-xl px-2.5 py-1.5">
-                  Cajas, stickers, papel y cinta ({resumen.itemsEmpaque.length})
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Costo Total (Insumos + Empaque + Horno/Extras) */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-4 h-full flex flex-col justify-between bg-gradient-to-br from-[#FFF5F7] to-white">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#2B1118]">
-                    4. Costo Real Total
-                  </span>
-                  <span className="rounded-full bg-[#2B1118] text-white px-2 py-0.5 text-[10px] font-nums font-semibold">
-                    +{gastosExtrasEdit}% extras
-                  </span>
-                </div>
-                <div className="my-2">
-                  <div className="font-nums text-xl sm:text-2xl font-extrabold text-[#BE123C]">
-                    {formatearMoneda(resumen.costoTotalLote)}
-                  </div>
-                  <div className="text-xs text-[#7A4957] mt-0.5">
-                    <strong className="font-nums text-[#2B1118]">
-                      {formatearMoneda(resumen.costoPorPack)}
-                    </strong>{' '}
-                    por {receta.nombre_pack.toLowerCase()} ·{' '}
-                    <strong className="font-nums text-[#2B1118]">
-                      {formatearMoneda(resumen.costoPorUnidad)}
-                    </strong>{' '}
-                    c/u
-                  </div>
-                </div>
-                <div className="text-[11px] text-[#7A4957] bg-white border border-[#F3C6D3] rounded-xl px-2.5 py-1.5">
-                  Incluye {formatearMoneda(resumen.costoGastosExtras)} de luz/gas/horno
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* PANEL ESTRELLA: SIMULADOR DE PRECIO DE VENTA Y DIAGNÓSTICO DE GANANCIA */}
-          <div className="bezel-shell-crimson">
-            <div className="bezel-core p-5 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#F8DCE4]">
-                <div>
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#BE123C]">
-                    <SlidersHorizontal size={14} weight="bold" />
-                    Diagnóstico de Precio y Ganancia en Vivo
-                  </span>
-                  <h3 className="font-editorial text-xl sm:text-2xl font-bold text-[#2B1118] mt-0.5">
-                    ¿A cuánto vender y cuánto te queda limpio?
-                  </h3>
-                </div>
-
-                {/* Semáforo de Salud del Precio */}
-                <div
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold ${
-                    resumen.estadoSalud === 'excelente'
-                      ? 'bg-[#DCFCE7] text-[#166534] border border-[#86EFAC]'
-                      : resumen.estadoSalud === 'correcto'
-                        ? 'bg-[#FEF9C3] text-[#854D0E] border border-[#FDE047]'
-                        : 'bg-[#FEE2E2] text-[#991B1B] border border-[#FCA5A5]'
-                  }`}
-                >
-                  {resumen.estadoSalud === 'excelente' || resumen.estadoSalud === 'correcto' ? (
-                    <TrendUp size={16} weight="bold" />
-                  ) : (
-                    <WarningCircle size={16} weight="bold" />
-                  )}
-                  <span>
-                    {resumen.estadoSalud === 'excelente'
-                      ? `Rentabilidad Excelente (${Math.round(resumen.margenRealPorcentaje)}% margen · x${resumen.multiplicadorSobreCosto.toFixed(1)})`
-                      : resumen.estadoSalud === 'correcto'
-                        ? `Precio Equilibrado (${Math.round(resumen.margenRealPorcentaje)}% margen · x${resumen.multiplicadorSobreCosto.toFixed(1)})`
-                        : resumen.estadoSalud === 'bajo'
-                          ? `Margen Bajo (${Math.round(resumen.margenRealPorcentaje)}%)`
-                          : '¡Cuidado! Precio a pérdida'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Barra Visual de cómo se reparte el Precio de Venta */}
-              <div className="mt-4">
-                <div className="flex items-center justify-between text-xs font-medium text-[#7A4957] mb-2">
-                  <span>¿Adónde va cada peso cuando vendés una tanda a {formatearMoneda(resumen.precioVentaLote)}?</span>
-                  <span className="font-nums font-bold text-[#15803D]">
-                    Tu ganancia limpia: {Math.max(0, Math.round(resumen.margenRealPorcentaje))}%
-                  </span>
-                </div>
-                <div className="h-4 w-full rounded-full overflow-hidden flex bg-[#FCE7F3] p-0.5 gap-0.5">
-                  <div
-                    style={{ width: `${porcentajeMasaSobreVenta}%` }}
-                    className="bg-[#FB7185] h-full rounded-l-full transition-all duration-300"
-                    title={`Masa: ${formatearMoneda(resumen.costoMasa)}`}
-                  />
-                  <div
-                    style={{ width: `${porcentajeRellenoSobreVenta}%` }}
-                    className="bg-[#E11D48] h-full transition-all duration-300"
-                    title={`Relleno/Baño: ${formatearMoneda(resumen.costoRellenoCobertura)}`}
-                  />
-                  <div
-                    style={{ width: `${porcentajeEmpaqueSobreVenta}%` }}
-                    className="bg-[#9F1239] h-full transition-all duration-300"
-                    title={`Empaque: ${formatearMoneda(resumen.costoEmpaque)}`}
-                  />
-                  <div
-                    style={{ width: `${porcentajeExtrasSobreVenta}%` }}
-                    className="bg-[#F59E0B] h-full transition-all duration-300"
-                    title={`Luz/Gas/Extras: ${formatearMoneda(resumen.costoGastosExtras)}`}
-                  />
-                  <div
-                    style={{ width: `${porcentajeGananciaSobreVenta}%` }}
-                    className="bg-[#10B981] h-full rounded-r-full transition-all duration-300"
-                    title={`Ganancia Limpia: ${formatearMoneda(resumen.gananciaPorLote)}`}
-                  />
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[#7A4957]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#FB7185]" />
-                    Masa ({formatearMoneda(resumen.costoMasa)})
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#E11D48]" />
-                    Relleno/Cobertura ({formatearMoneda(resumen.costoRellenoCobertura)})
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#9F1239]" />
-                    Empaque ({formatearMoneda(resumen.costoEmpaque)})
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
-                    Horno/Gas ({formatearMoneda(resumen.costoGastosExtras)})
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 font-semibold text-[#15803D]">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
-                    Tu Ganancia Limpia ({formatearMoneda(resumen.gananciaPorLote)})
-                  </span>
-                </div>
-              </div>
-
-              {/* Comparativa 3 Columnas: Por Unidad | Por Caja/Pack | Por Lote Completo */}
-              <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Columna 1: Por Unidad */}
-                <div className="rounded-2xl bg-[#FFF5F7] border border-[#F3C6D3] p-4">
-                  <div className="text-xs font-bold uppercase tracking-wider text-[#7A4957]">
-                    Por 1 {receta.rendimiento_unidad.replace(/s$/, '')} individual
-                  </div>
-                  <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-xs text-[#7A4957]">Costo real:</span>
-                    <span className="font-nums text-sm font-semibold text-[#2B1118]">
-                      {formatearMoneda(resumen.costoPorUnidad)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-xs text-[#7A4957]">Precio venta:</span>
-                    <span className="font-nums text-lg font-bold text-[#BE123C]">
-                      {formatearMoneda(resumen.precioVentaUnidad)}
-                    </span>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-[#F3C6D3] flex items-baseline justify-between">
-                    <span className="text-xs font-bold text-[#15803D]">Ganancia neta:</span>
-                    <span className="font-nums text-base font-extrabold text-[#15803D]">
-                      +{formatearMoneda(resumen.gananciaPorUnidad)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Columna 2: Por Caja / Pack (Destacada) */}
-                <div className="rounded-2xl bg-gradient-to-br from-[#BE123C] to-[#E11D48] text-white p-4 shadow-md">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-[#FFE4E9]">
-                      Por {receta.nombre_pack} ({receta.unidades_por_pack} u.)
-                    </span>
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold">
-                      Más vendido
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-xs text-[#FFE4E9]">Costo masa + caja:</span>
-                    <span className="font-nums text-sm font-semibold text-white">
-                      {formatearMoneda(resumen.costoPorPack)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-xs text-[#FFE4E9]">Precio de venta:</span>
-                    <span className="font-nums text-xl font-extrabold text-white">
-                      {formatearMoneda(resumen.precioVentaPack)}
-                    </span>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-white/20 flex items-baseline justify-between">
-                    <span className="text-xs font-bold text-[#BBF7D0]">Ganancia en mano:</span>
-                    <span className="font-nums text-lg font-extrabold text-[#BBF7D0]">
-                      +{formatearMoneda(resumen.gananciaPorPack)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Columna 3: Por Lote Completo */}
-                <div className="rounded-2xl bg-[#FFF5F7] border border-[#F3C6D3] p-4">
-                  <div className="text-xs font-bold uppercase tracking-wider text-[#7A4957]">
-                    Tanda Completa ({resumen.rendimientoEscalado} {receta.rendimiento_unidad})
-                  </div>
-                  <div className="mt-2 flex items-baseline justify-between">
-                    <span className="text-xs text-[#7A4957]">Inversión total:</span>
-                    <span className="font-nums text-sm font-semibold text-[#2B1118]">
-                      {formatearMoneda(resumen.costoTotalLote)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-baseline justify-between">
-                    <span className="text-xs text-[#7A4957]">Venta total tanda:</span>
-                    <span className="font-nums text-lg font-bold text-[#BE123C]">
-                      {formatearMoneda(resumen.precioVentaLote)}
-                    </span>
-                  </div>
-                  <div className="mt-2 pt-2 border-t border-[#F3C6D3] flex items-baseline justify-between">
-                    <span className="text-xs font-bold text-[#15803D]">Ganancia limpia:</span>
-                    <span className="font-nums text-base font-extrabold text-[#15803D]">
-                      +{formatearMoneda(resumen.gananciaPorLote)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mensaje Diagnóstico Explicado en Lenguaje Simple */}
-              <div className="mt-4 rounded-2xl bg-[#FFF0F3] border border-[#F3C6D3] p-3.5 flex items-start gap-3">
-                <Info size={20} weight="duotone" className="text-[#BE123C] shrink-0 mt-0.5" />
-                <p className="text-xs sm:text-sm text-[#2B1118] leading-relaxed">
-                  {resumen.mensajeDiagnostico}
+      {/* ============================ PRECIO Y GANANCIA ============================ */}
+      {pestana === 'precio' && (
+        <div className="grid gap-6 lg:grid-cols-5">
+          <div className="min-w-0 space-y-6 lg:col-span-3">
+            {sinCosto ? (
+              <div className="card p-5">
+                <h2 className="text-lg font-bold">Falta saber cuánto te cuesta</h2>
+                <p className="mt-1 text-[0.9375rem] text-ink-soft">
+                  Este producto todavía no tiene ingredientes con cantidad, así que no podemos decirte
+                  cuánto ganas. Agrégalos y el cálculo aparece solo.
                 </p>
+                <button
+                  type="button"
+                  className="btn btn-primary mt-4"
+                  onClick={() => onEditarReceta(receta)}
+                >
+                  Agregar ingredientes
+                </button>
               </div>
-
-              {/* Controles Interactivos para Probar y Guardar Precio de Venta */}
-              <div className="mt-5 pt-4 border-t border-[#F8DCE4] grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
-                <div className="lg:col-span-7 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-[#2B1118]">
-                      Probar Precio de Venta por {receta.nombre_pack}:
-                    </label>
-                    <span className="font-nums text-sm font-extrabold text-[#BE123C]">
-                      {formatearMoneda(precioPackEdit)}
-                    </span>
+            ) : (
+              <div className="card p-5">
+                <dl className="grid grid-cols-3 gap-3">
+                  <div>
+                    <dt className="text-sm text-ink-soft">Te cuesta</dt>
+                    <dd className="num mt-0.5 text-xl font-bold sm:text-2xl">
+                      {formatearMoneda(r.costoPorPack)}
+                    </dd>
                   </div>
-                  <input
-                    type="range"
-                    min={Math.max(500, Math.round(resumen.costoPorPack * 0.8))}
-                    max={Math.max(5000, Math.round(resumen.costoPorPack * 4.2))}
-                    step={100}
-                    value={precioPackEdit}
-                    onChange={(e) => handleCambiarPrecioPack(Number(e.target.value))}
-                    className="chefcita-slider"
-                  />
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[11px] text-[#7A4957] mr-1">Sugeridos rápidos:</span>
-                    {[
-                      { label: 'x2.0 (Amigo)', mult: 2.0 },
-                      { label: 'x2.5 (Ideal Pastelería)', mult: 2.5 },
-                      { label: 'x3.0 (Artisanal)', mult: 3.0 },
-                    ].map((btn) => (
-                      <button
-                        key={btn.mult}
-                        type="button"
-                        onClick={() => handleAplicarMultiplicador(btn.mult)}
-                        className="rounded-full bg-[#FFF0F3] hover:bg-[#FFE0E7] border border-[#F3C6D3] px-3 py-1 text-[11px] font-semibold text-[#BE123C] spring-transition cursor-pointer"
-                      >
-                        {btn.label}: {formatearMoneda(redondearPrecioComercial(resumen.costoPorPack * btn.mult))}
-                      </button>
-                    ))}
+                  <div>
+                    <dt className="text-sm text-ink-soft">Lo vendes a</dt>
+                    <dd className="num mt-0.5 text-xl font-bold sm:text-2xl">
+                      {formatearMoneda(r.precioVentaPack)}
+                    </dd>
                   </div>
-                </div>
+                  <div>
+                    <dt className="text-sm text-ink-soft">{r.gananciaPorPack < 0 ? 'Pierdes' : 'Ganas'}</dt>
+                    <dd className={`num mt-0.5 text-xl font-bold sm:text-2xl ${COLOR_TEXTO[tono]}`}>
+                      {formatearMoneda(Math.abs(r.gananciaPorPack))}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="mt-1 text-sm text-ink-soft">Por {nombreVenta}</p>
 
-                <div className="lg:col-span-5 flex flex-wrap sm:flex-nowrap items-center justify-end gap-2">
-                  <div className="flex items-center gap-1.5 bg-[#FFF5F7] border border-[#F3C6D3] rounded-full px-3 py-1.5">
-                    <span className="text-xs font-medium text-[#7A4957]">Precio {receta.nombre_pack}: $</span>
-                    <input
-                      type="number"
-                      value={precioPackEdit}
-                      onChange={(e) => handleCambiarPrecioPack(Number(e.target.value))}
-                      className="w-24 font-nums font-bold text-sm text-[#2B1118] bg-transparent focus:outline-none"
+                <div className="mt-4 flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-sunken">
+                  {partes.map((p) => (
+                    <div
+                      key={p.nombre}
+                      className={`${p.color} h-full transition-[width] duration-300 ease-out`}
+                      style={{ width: `${(p.valor / venta) * 100}%` }}
                     />
-                  </div>
+                  ))}
+                </div>
+                <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-soft">
+                  {partes.map((p) => (
+                    <li key={p.nombre} className="flex items-center gap-1.5">
+                      <span className={`h-2.5 w-2.5 rounded-full ${p.color}`} />
+                      {p.nombre} <span className="num">{Math.round((p.valor / venta) * 100)}%</span>
+                    </li>
+                  ))}
+                </ul>
 
+                <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-4">
+                  <Etiqueta tono={tono}>{TEXTO_SALUD[r.estadoSalud]}</Etiqueta>
+                  <p className="text-[0.9375rem]">{r.mensajeDiagnostico}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="card p-5">
+              <h2 className="text-lg font-bold">Cambiar el precio</h2>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                Prueba un precio y mira arriba cuánto ganarías. No se guarda hasta que lo confirmes.
+              </p>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <div className="sm:w-48">
+                  <CampoDinero value={precioEdit} onChange={setPrecioEdit} placeholder="0" />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!precioCambiado || guardando}
+                  onClick={guardarPrecio}
+                >
+                  <Check size={18} weight="bold" />
+                  {guardando ? 'Guardando…' : 'Guardar precio'}
+                </button>
+                {precioCambiado && (
                   <button
                     type="button"
-                    disabled={guardandoPrecio}
-                    onClick={handleGuardarPrecios}
-                    className="inline-flex items-center gap-2 rounded-full bg-[#2B1118] hover:bg-[#451A26] active:scale-[0.98] text-white px-4 py-2.5 text-xs font-bold spring-transition cursor-pointer"
+                    className="btn btn-ghost"
+                    onClick={() => setPrecioEdit(String(receta.precio_venta_pack || ''))}
                   >
-                    <FloppyDisk size={16} weight="duotone" />
-                    <span>{mensajeGuardado ? '¡Precio guardado!' : 'Fijar este precio'}</span>
+                    Deshacer
                   </button>
-                </div>
+                )}
               </div>
+              {!sinCosto && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {sugerencias.map((s) => (
+                    <button
+                      key={s.nombre}
+                      type="button"
+                      aria-pressed={precioNum === s.precio}
+                      onClick={() => setPrecioEdit(String(s.precio))}
+                      className={`btn btn-sm ${
+                        precioNum === s.precio ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
+                      }`}
+                    >
+                      {s.nombre} <span className="num">{formatearMoneda(s.precio)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* DESGLOSE DETALLADO POR SECCIÓN: 1. MASA | 2. RELLENO/BAÑO | 3. EMPAQUE */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Tarjeta Desglose 1: MASA */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-5 h-full flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#BE123C]">
-                        Sección 1
-                      </span>
-                      <h4 className="font-editorial text-lg font-bold text-[#2B1118]">
-                        Ingredientes de la Masa
-                      </h4>
-                    </div>
-                    <span className="font-nums text-base font-extrabold text-[#BE123C]">
-                      {formatearMoneda(resumen.costoMasa)}
-                    </span>
-                  </div>
-
-                  <ul className="mt-3 divide-y divide-[#FDF2F5]">
-                    {resumen.itemsMasa.map((d) => (
-                      <li key={d.item.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
-                        <div>
-                          <div className="font-semibold text-[#2B1118]">
-                            {d.insumo?.nombre || 'Insumo'}
-                          </div>
-                          <div className="text-[11px] text-[#7A4957]">
-                            <span className="font-nums font-semibold text-[#9F1239]">
-                              {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
-                            </span>
-                            {d.item.nota ? ` · ${d.item.nota}` : ''}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-nums font-bold text-[#2B1118]">
-                            {formatearMoneda(d.costoItem)}
-                          </div>
-                          <div className="font-nums text-[10px] text-[#7A4957]">
-                            {Math.round(d.porcentajeDelTotal)}% del costo
-                          </div>
-                        </div>
-                      </li>
+            {!sinCosto && (
+              <div className="card overflow-x-auto">
+                <table className="num w-full text-left text-[0.9375rem]">
+                  <thead>
+                    <tr className="border-b border-line text-sm text-ink-soft">
+                      <th className="px-5 py-3 font-medium"></th>
+                      <th className="px-2 py-3 text-right font-medium sm:px-3">Costo</th>
+                      <th className="px-2 py-3 text-right font-medium sm:px-3">Venta</th>
+                      <th className="py-3 pl-2 pr-4 text-right font-medium sm:pr-5">Ganancia</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {filas.map((f) => (
+                      <tr key={f.nombre}>
+                        <th className="py-3 pl-4 pr-2 font-semibold sm:pl-5">{f.nombre}</th>
+                        <td className="px-2 py-3 text-right sm:px-3">{formatearMoneda(f.costo)}</td>
+                        <td className="px-2 py-3 text-right sm:px-3">{formatearMoneda(f.venta)}</td>
+                        <td className={`py-3 pl-2 pr-4 text-right font-bold sm:pr-5 ${COLOR_TEXTO[tono]}`}>
+                          {formatearMoneda(f.gana)}
+                        </td>
+                      </tr>
                     ))}
-                  </ul>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-[#F8DCE4] flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#7A4957]">Costo masa por unidad:</span>
-                  <span className="font-nums font-bold text-[#BE123C]">
-                    {formatearMoneda(resumen.costoMasaPorUnidad)}
-                  </span>
-                </div>
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Tarjeta Desglose 2: RELLENO Y COBERTURA */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-5 h-full flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#BE185D]">
-                        Sección 2
-                      </span>
-                      <h4 className="font-editorial text-lg font-bold text-[#2B1118]">
-                        Relleno, Glasé y Decoración
-                      </h4>
-                    </div>
-                    <span className="font-nums text-base font-extrabold text-[#BE185D]">
-                      {formatearMoneda(resumen.costoRellenoCobertura)}
-                    </span>
-                  </div>
-
-                  {resumen.itemsRelleno.length === 0 ? (
-                    <p className="text-xs text-[#7A4957] py-6 text-center">
-                      Sin insumos de cobertura cargados en esta receta.
-                    </p>
-                  ) : (
-                    <ul className="mt-3 divide-y divide-[#FDF2F5]">
-                      {resumen.itemsRelleno.map((d) => (
-                        <li key={d.item.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
-                          <div>
-                            <div className="font-semibold text-[#2B1118]">
-                              {d.insumo?.nombre || 'Insumo'}
-                            </div>
-                            <div className="text-[11px] text-[#7A4957]">
-                              <span className="font-nums font-semibold text-[#BE185D]">
-                                {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
-                              </span>
-                              {d.item.nota ? ` · ${d.item.nota}` : ''}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-nums font-bold text-[#2B1118]">
-                              {formatearMoneda(d.costoItem)}
-                            </div>
-                            <div className="font-nums text-[10px] text-[#7A4957]">
-                              {Math.round(d.porcentajeDelTotal)}% del costo
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-[#F8DCE4] flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#7A4957]">Costo baño/relleno por unidad:</span>
-                  <span className="font-nums font-bold text-[#BE185D]">
-                    {formatearMoneda(resumen.costoRellenoPorUnidad)}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Tarjeta Desglose 3: EMPAQUE Y PRESENTACIÓN */}
-            <div className="bezel-shell">
-              <div className="bezel-core p-5 h-full flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#B91C1C]">
-                        Sección 3
-                      </span>
-                      <h4 className="font-editorial text-lg font-bold text-[#2B1118]">
-                        Empaque y Packaging
-                      </h4>
-                    </div>
-                    <span className="font-nums text-base font-extrabold text-[#B91C1C]">
-                      {formatearMoneda(resumen.costoEmpaque)}
-                    </span>
-                  </div>
-
-                  {resumen.itemsEmpaque.length === 0 ? (
-                    <p className="text-xs text-[#7A4957] py-6 text-center">
-                      Sin empaques asignados a esta receta.
-                    </p>
-                  ) : (
-                    <ul className="mt-3 divide-y divide-[#FDF2F5]">
-                      {resumen.itemsEmpaque.map((d) => (
-                        <li key={d.item.id} className="py-2.5 flex items-center justify-between gap-2 text-xs">
-                          <div>
-                            <div className="font-semibold text-[#2B1118]">
-                              {d.insumo?.nombre || 'Empaque'}
-                            </div>
-                            <div className="text-[11px] text-[#7A4957]">
-                              <span className="font-nums font-semibold text-[#B91C1C]">
-                                {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
-                              </span>
-                              {d.item.nota ? ` · ${d.item.nota}` : ''}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-nums font-bold text-[#2B1118]">
-                              {formatearMoneda(d.costoItem)}
-                            </div>
-                            <div className="font-nums text-[10px] text-[#7A4957]">
-                              {Math.round(d.porcentajeDelTotal)}% del costo
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-[#F8DCE4] flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#7A4957]">
-                    Empaque por cada {receta.nombre_pack.toLowerCase()}:
-                  </span>
-                  <span className="font-nums font-bold text-[#B91C1C]">
-                    {formatearMoneda(
-                      resumen.cantidadPacksEnLote > 0
-                        ? resumen.costoEmpaque / resumen.cantidadPacksEnLote
-                        : resumen.costoEmpaque
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Acción Rápida: Agendar esta tanda como Pedido */}
-          <div className="flex justify-end">
+          <div className="min-w-0 lg:col-span-2">
+            <div className="card p-5">
+              <h2 className="text-lg font-bold">En qué se va el costo</h2>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                Para {receta.rendimiento_cantidad} {receta.rendimiento_unidad}.
+              </p>
+
+              {grupos.length === 0 ? (
+                <p className="mt-4 text-[0.9375rem] text-ink-soft">Aún no hay ingredientes.</p>
+              ) : (
+                <div className="mt-4 space-y-5">
+                  {grupos.map((g) => (
+                    <div key={g.titulo}>
+                      <div className="flex items-baseline justify-between text-sm font-semibold text-ink-soft">
+                        <span>{g.titulo}</span>
+                        <span className="num">{formatearMoneda(g.total)}</span>
+                      </div>
+                      <ul className="mt-1.5 divide-y divide-line">
+                        {g.lista.map((d) => (
+                          <li key={d.item.id} className="flex items-baseline justify-between gap-3 py-2">
+                            <div className="min-w-0">
+                              <span className={d.insumo ? '' : 'text-bad'}>
+                                {d.insumo?.nombre || 'Ingrediente eliminado'}
+                              </span>
+                              <span className="num ml-2 text-sm text-ink-soft">
+                                {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
+                              </span>
+                            </div>
+                            <span className="num shrink-0 font-semibold">
+                              {formatearMoneda(d.costoItem)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  {r.costoGastosExtras > 0 && (
+                    <div className="flex items-baseline justify-between text-[0.9375rem]">
+                      <span>
+                        Gas, luz y otros{' '}
+                        <span className="num text-sm text-ink-soft">
+                          ({receta.porcentaje_gastos_extras}%)
+                        </span>
+                      </span>
+                      <span className="num font-semibold">{formatearMoneda(r.costoGastosExtras)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-baseline justify-between border-t border-line-strong pt-3 text-base font-bold">
+                    <span>Costo total</span>
+                    <span className="num">{formatearMoneda(r.costoTotalLote)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => onCrearPedidoDesdeReceta(receta, factorEscala, resumen)}
-              className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white pl-6 pr-2 py-2 text-xs sm:text-sm font-bold shadow-md hover:shadow-lg active:scale-[0.98] spring-transition cursor-pointer"
+              onClick={() => setConfirmarBorrado(true)}
+              className="btn btn-ghost mt-4 text-bad hover:bg-bad-soft"
             >
-              <span>
-                Agendar tanda de {resumen.rendimientoEscalado} {receta.rendimiento_unidad} en Mis Pedidos
-              </span>
-              <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-x-0.5 group-hover:-translate-y-0.5 spring-transition">
-                <ArrowUpRight size={16} weight="bold" />
-              </span>
+              <Trash size={18} />
+              Eliminar producto
             </button>
           </div>
         </div>
       )}
 
-      {/* ==================================================================== */}
-      {/* VISTA 2: MODO PREPARAR (RECETARIO INTERACTIVO + PESaje + TIMERS)      */}
-      {/* ==================================================================== */}
-      {subTab === 'preparar' && (
-        <div className="space-y-5">
-          {/* Timer Flotante si hay un temporizador activo */}
-          {timerActivoPasoId && (
-            <div className="bezel-shell-crimson sticky top-20 z-30">
-              <div className="bezel-core-crimson p-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
-                    <Timer size={22} weight="duotone" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] uppercase tracking-wider font-semibold text-[#FFE4E9]">
-                      Temporizador de Cocina · {timerEtiqueta}
-                    </div>
-                    <div className="font-nums text-2xl font-extrabold">
-                      {timerSegundosRestantes === 0
-                        ? '¡Tiempo cumplido! 🔔'
-                        : formatearSegundos(timerSegundosRestantes)}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
+      {/* ================================ PREPARAR ================================ */}
+      {pestana === 'preparar' && (
+        <div className="space-y-6">
+          {timerPaso && (
+            <div className="sticky top-20 z-20 flex items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3 text-white shadow-[0_8px_24px_rgba(42,31,27,0.25)]">
+              <div className="flex items-center gap-3">
+                <Timer size={24} weight="duotone" />
+                <span className="num font-display text-2xl font-semibold">
+                  {timerSeg === 0 ? '¡Tiempo!' : formatearTiempo(timerSeg)}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {timerSeg > 0 && (
                   <button
                     type="button"
-                    onClick={() => setTimerCorriendo((prev) => !prev)}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white text-[#BE123C] px-4 py-2 text-xs font-bold cursor-pointer"
+                    onClick={() => setTimerCorriendo((v) => !v)}
+                    className="btn btn-sm bg-white text-ink"
                   >
-                    {timerCorriendo ? <Pause size={15} weight="fill" /> : <Play size={15} weight="fill" />}
-                    {timerCorriendo ? 'Pausar' : 'Continuar'}
+                    {timerCorriendo ? <Pause size={16} weight="fill" /> : <Play size={16} weight="fill" />}
+                    {timerCorriendo ? 'Pausar' : 'Seguir'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setTimerCorriendo(false);
-                      setTimerActivoPasoId(null);
-                    }}
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/20 text-white hover:bg-white/30 cursor-pointer"
-                    title="Cerrar timer"
-                  >
-                    <ArrowCounterClockwise size={16} />
-                  </button>
-                </div>
+                )}
+                <button
+                  type="button"
+                  aria-label="Cerrar temporizador"
+                  onClick={() => {
+                    setTimerCorriendo(false);
+                    setTimerPaso(null);
+                  }}
+                  className="flex h-[38px] w-[38px] cursor-pointer items-center justify-center rounded-[10px] bg-white/15 hover:bg-white/25"
+                >
+                  <X size={18} weight="bold" />
+                </button>
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Columna Izquierda: Checklist de Ingredientes a Pesar (Mise en Place) */}
-            <div className="lg:col-span-5 bezel-shell h-fit">
-              <div className="bezel-core p-5">
-                <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#BE123C]">
-                      Paso 1 · Mise en Place
-                    </span>
-                    <h3 className="font-editorial text-lg font-bold text-[#2B1118]">
-                      Pesar Ingredientes ({ingredientesCompletadosCount}/{totalIngredientesCount})
-                    </h3>
-                  </div>
+          <div className="card p-5">
+            <h2 className="text-lg font-bold">¿Cuánto vas a preparar?</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                { v: 0.5, n: 'La mitad' },
+                { v: 1, n: 'Una receta' },
+                { v: 2, n: 'El doble' },
+                { v: 3, n: 'El triple' },
+              ].map((op) => (
+                <button
+                  key={op.v}
+                  type="button"
+                  aria-pressed={veces === op.v}
+                  onClick={() => setVeces(op.v)}
+                  className={`btn btn-sm ${
+                    veces === op.v ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
+                  }`}
+                >
+                  {op.n}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-[0.9375rem] text-ink-soft">
+              Salen{' '}
+              <strong className="num text-ink">
+                {Math.round(rPreparar.rendimientoEscalado * 10) / 10} {receta.rendimiento_unidad}
+              </strong>
+              . Las cantidades de abajo ya están ajustadas.
+            </p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-5">
+            <div className="card min-w-0 p-5 lg:col-span-2">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-lg font-bold">Lo que necesitas</h2>
+                {Object.values(marcados).some(Boolean) && (
                   <button
                     type="button"
-                    onClick={() => setIngredientesMarcados({})}
-                    className="text-[11px] font-semibold text-[#BE123C] hover:underline cursor-pointer"
+                    onClick={() => setMarcados({})}
+                    className="cursor-pointer text-sm font-semibold text-berry hover:underline"
                   >
-                    Reiniciar
+                    Desmarcar todo
                   </button>
-                </div>
-
-                <p className="text-xs text-[#7A4957] mt-2">
-                  Tocá cada ingrediente a medida que lo pesás en la balanza para tu tanda de{' '}
-                  <strong className="text-[#2B1118]">
-                    {resumen.rendimientoEscalado} {receta.rendimiento_unidad}
-                  </strong>
-                  :
+                )}
+              </div>
+              {gruposPreparar.length === 0 ? (
+                <p className="mt-3 text-[0.9375rem] text-ink-soft">
+                  Este producto aún no tiene ingredientes.
                 </p>
-
-                <div className="mt-4 space-y-4">
-                  {[
-                    { titulo: '🥣 Para la Masa', lista: resumen.itemsMasa },
-                    { titulo: '🍓 Para Relleno y Cobertura', lista: resumen.itemsRelleno },
-                    { titulo: '🎁 Empaques a preparar', lista: resumen.itemsEmpaque },
-                  ].map(
-                    (grupo) =>
-                      grupo.lista.length > 0 && (
-                        <div key={grupo.titulo} className="space-y-1.5">
-                          <div className="text-xs font-bold text-[#9F1239]">{grupo.titulo}</div>
-                          {grupo.lista.map((d) => {
-                            const marcado = Boolean(ingredientesMarcados[d.item.id]);
-                            return (
+              ) : (
+                <div className="mt-3 space-y-4">
+                  {gruposPreparar.map((g) => (
+                    <div key={g.titulo}>
+                      <div className="text-sm font-semibold text-ink-soft">{g.titulo}</div>
+                      <ul className="mt-1">
+                        {g.lista.map((d) => {
+                          const listo = Boolean(marcados[d.item.id]);
+                          return (
+                            <li key={d.item.id}>
                               <button
-                                key={d.item.id}
                                 type="button"
+                                aria-pressed={listo}
                                 onClick={() =>
-                                  setIngredientesMarcados((prev) => ({
-                                    ...prev,
-                                    [d.item.id]: !prev[d.item.id],
-                                  }))
+                                  setMarcados((prev) => ({ ...prev, [d.item.id]: !prev[d.item.id] }))
                                 }
-                                className={`w-full flex items-center justify-between gap-2 rounded-2xl p-3 text-left spring-transition cursor-pointer border ${
-                                  marcado
-                                    ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#166534]'
-                                    : 'bg-[#FFF5F7] border-[#F3C6D3] hover:bg-[#FFE8EE] text-[#2B1118]'
-                                }`}
+                                className="flex min-h-[48px] w-full cursor-pointer items-center gap-3 rounded-lg px-1 text-left hover:bg-paper"
                               >
-                                <div className="flex items-center gap-2.5">
-                                  {marcado ? (
-                                    <CheckCircle size={20} weight="fill" className="text-[#16A34A] shrink-0" />
-                                  ) : (
-                                    <Circle size={20} weight="regular" className="text-[#E11D48] shrink-0" />
-                                  )}
-                                  <div>
-                                    <div className={`text-xs font-bold ${marcado ? 'line-through opacity-75' : ''}`}>
-                                      {d.insumo?.nombre || 'Insumo'}
-                                    </div>
-                                    {d.item.nota && (
-                                      <div className="text-[11px] opacity-75">{d.item.nota}</div>
-                                    )}
-                                  </div>
-                                </div>
-                                <span className="font-nums text-xs sm:text-sm font-extrabold px-2.5 py-1 rounded-full bg-white shadow-2xs">
+                                {listo ? (
+                                  <CheckCircle size={24} weight="fill" className="shrink-0 text-ok" />
+                                ) : (
+                                  <Circle size={24} className="shrink-0 text-line-strong" />
+                                )}
+                                <span className={`flex-1 ${listo ? 'text-ink-soft line-through' : ''}`}>
+                                  {d.insumo?.nombre || 'Ingrediente eliminado'}
+                                </span>
+                                <span className={`num font-semibold ${listo ? 'text-ink-soft' : ''}`}>
                                   {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
                                 </span>
                               </button>
-                            );
-                          })}
-                        </div>
-                      )
-                  )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
 
-            {/* Columna Derecha: Pasos de Preparación + Secretos de la Chefcita */}
-            <div className="lg:col-span-7 space-y-4">
-              <div className="bezel-shell">
-                <div className="bezel-core p-5">
-                  <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#BE123C]">
-                        Paso 2 · Elaboración Paso a Paso
-                      </span>
-                      <h3 className="font-editorial text-lg font-bold text-[#2B1118]">
-                        Instrucciones de Cocina ({pasosCompletadosCount}/{totalPasosCount})
-                      </h3>
-                    </div>
-                    <div className="text-xs font-medium text-[#7A4957]">
-                      Prep: <strong className="font-nums text-[#2B1118]">{receta.tiempo_preparacion_min} min</strong> ·
-                      Cocción: <strong className="font-nums text-[#2B1118]">{receta.tiempo_horneado_min} min</strong>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-3.5">
-                    {receta.pasos.map((paso) => {
-                      const completado = Boolean(pasosMarcados[paso.id]);
-                      return (
-                        <div
-                          key={paso.id}
-                          className={`rounded-2xl p-4 border spring-transition ${
-                            completado
-                              ? 'bg-[#F0FDF4]/80 border-[#BBF7D0]'
-                              : 'bg-[#FFF9FA] border-[#F3C6D3]'
+            <div className="card min-w-0 p-5 lg:col-span-3">
+              <h2 className="text-lg font-bold">Paso a paso</h2>
+              {receta.pasos.length === 0 ? (
+                <div className="mt-3">
+                  <p className="text-[0.9375rem] text-ink-soft">
+                    Aún no anotas los pasos de esta receta. Si los agregas, puedes seguirlos desde
+                    aquí mientras cocinas, con temporizador incluido.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary mt-4"
+                    onClick={() => onEditarReceta(receta)}
+                  >
+                    Anotar los pasos
+                  </button>
+                </div>
+              ) : (
+                <ol className="mt-3 divide-y divide-line">
+                  {receta.pasos.map((paso, idx) => {
+                    const hecho = Boolean(pasosHechos[paso.id]);
+                    return (
+                      <li key={paso.id} className="flex items-start gap-3 py-3">
+                        <button
+                          type="button"
+                          aria-pressed={hecho}
+                          aria-label={`Marcar paso ${idx + 1} como hecho`}
+                          onClick={() =>
+                            setPasosHechos((prev) => ({ ...prev, [paso.id]: !prev[paso.id] }))
+                          }
+                          className={`num mt-0.5 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-sm font-bold transition-colors ${
+                            hecho ? 'bg-ok text-white' : 'bg-sunken text-ink hover:bg-line'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-3">
+                          {hecho ? <Check size={16} weight="bold" /> : idx + 1}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className={`leading-relaxed ${hecho ? 'text-ink-soft line-through' : ''}`}>
+                            {paso.instruccion}
+                          </p>
+                          {paso.tip_secreto && (
+                            <p className="mt-1 text-sm text-ink-soft">{paso.tip_secreto}</p>
+                          )}
+                          {paso.tiempo_timer_min && paso.tiempo_timer_min > 0 ? (
                             <button
                               type="button"
-                              onClick={() =>
-                                setPasosMarcados((prev) => ({
-                                  ...prev,
-                                  [paso.id]: !prev[paso.id],
-                                }))
-                              }
-                              className="flex items-start gap-3 text-left cursor-pointer flex-1"
+                              onClick={() => {
+                                setTimerPaso(paso.id);
+                                setTimerSeg(paso.tiempo_timer_min! * 60);
+                                setTimerCorriendo(true);
+                              }}
+                              className="btn btn-sm btn-secondary mt-2"
                             >
-                              <span
-                                className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center font-nums text-xs font-bold shrink-0 ${
-                                  completado
-                                    ? 'bg-[#16A34A] text-white'
-                                    : 'bg-[#BE123C] text-white'
-                                }`}
-                              >
-                                {completado ? '✓' : paso.paso_numero}
-                              </span>
-                              <div>
-                                <div className="text-xs font-bold uppercase tracking-wider text-[#BE123C]">
-                                  {paso.etapa}
-                                </div>
-                                <p
-                                  className={`text-sm text-[#2B1118] mt-1 leading-relaxed ${
-                                    completado ? 'line-through opacity-70' : ''
-                                  }`}
-                                >
-                                  {paso.instruccion}
-                                </p>
-                              </div>
+                              <Timer size={16} />
+                              Iniciar {paso.tiempo_timer_min} min
                             </button>
-
-                            {paso.tiempo_timer_min && paso.tiempo_timer_min > 0 && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  iniciarTimerPaso(paso.id, paso.tiempo_timer_min!, paso.etapa)
-                                }
-                                className="inline-flex items-center gap-1.5 rounded-full bg-[#FFE4E9] hover:bg-[#FECDD3] text-[#BE123C] px-3 py-1.5 text-xs font-nums font-bold shrink-0 cursor-pointer spring-transition"
-                              >
-                                <Timer size={15} weight="duotone" />
-                                {paso.tiempo_timer_min} min
-                              </button>
-                            )}
-                          </div>
-
-                          {paso.tip_secreto && (
-                            <div className="mt-3 ml-10 rounded-xl bg-white/90 border border-[#F5D0DC] px-3 py-2 text-xs text-[#7A4957]">
-                              <strong className="text-[#BE123C]">💡 Tip Chefcita:</strong>{' '}
-                              {paso.tip_secreto}
-                            </div>
-                          )}
+                          ) : null}
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Nota general / Secreto de conservación */}
-                  {receta.notas_chefcita && (
-                    <div className="mt-5 rounded-2xl bg-gradient-to-r from-[#FFF0F3] to-[#FCE7F3] border border-[#F3C6D3] p-4">
-                      <div className="text-xs font-bold uppercase tracking-wider text-[#BE123C] mb-1">
-                        ✨ Secreto de la Chefcita y Conservación
-                      </div>
-                      <p className="text-xs sm:text-sm text-[#2B1118] leading-relaxed">
-                        {receta.notas_chefcita}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              {receta.notas_chefcita && (
+                <p className="mt-4 rounded-xl bg-sunken px-4 py-3 text-[0.9375rem]">
+                  <strong>Notas:</strong> {receta.notas_chefcita}
+                </p>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {confirmarBorrado && (
+        <Confirmar
+          titulo={`¿Eliminar ${receta.nombre}?`}
+          detalle="Se borra el producto con sus ingredientes y pasos. Los pedidos ya anotados no se tocan."
+          onCancelar={() => setConfirmarBorrado(false)}
+          onConfirmar={async () => {
+            setConfirmarBorrado(false);
+            await onEliminarReceta(receta.id);
+          }}
+        />
       )}
     </div>
   );

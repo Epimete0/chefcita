@@ -1,36 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 const fraunces = Fraunces({
-  variable: "--font-display",
+  variable: "--font-heading",
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
+  weight: ["600", "700"],
 });
 
 const jakarta = Plus_Jakarta_Sans({
-  variable: "--font-sans",
+  variable: "--font-body",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
 export const metadata: Metadata = {
-  title: "Chefcita · Costos, Insumos y Recetario de Pastelería",
+  title: "Chefcita",
   description:
-    "Tu atelier personal de pastelería en casa: calculá el costo exacto de masa, relleno y empaque, simulá precios de venta, controlá tu ganancia y seguí tus recetas paso a paso.",
+    "Tus dulces, tus precios y tus pedidos en un solo lugar: cuánto te cuesta cada producto, a cuánto venderlo y qué tienes que entregar.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#FFF5F7",
+  themeColor: "#FAF6F1",
 };
 
 export default function RootLayout({
@@ -39,13 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className={`${fraunces.variable} ${jakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-[100dvh] bg-[#FFF8F9] text-[#2B1118] selection:bg-[#F43F5E]/20 selection:text-[#9F1239]">
-        {children}
-      </body>
+    <html lang="es" className={`${fraunces.variable} ${jakarta.variable} h-full antialiased`}>
+      <body className="min-h-[100dvh]">{children}</body>
     </html>
   );
 }

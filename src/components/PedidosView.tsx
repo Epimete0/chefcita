@@ -1,597 +1,591 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Insumo, Pedido, Receta } from '@/lib/types';
+import React, { useMemo, useState } from 'react';
+import { EstadoPedido, Insumo, Pedido, Receta } from '@/lib/types';
 import {
   calcularCostosReceta,
-  convertirAUnidadBase,
+  calcularListaCompras,
+  describirFecha,
   formatearMoneda,
   formatearCantidad,
+  hoyISO,
+  ItemCompra,
 } from '@/lib/costing';
 import {
-  CalendarBlank,
-  Plus,
-  CheckCircle,
-  Clock,
-  CookingPot,
-  ShoppingBag,
-  Trash,
-  Sparkle,
-  CurrencyDollar,
-  Package,
-  WhatsappLogo,
-} from '@phosphor-icons/react';
+  Sheet,
+  Campo,
+  CampoDinero,
+  Segmentos,
+  Vacio,
+  EncabezadoVista,
+  Etiqueta,
+  Confirmar,
+  Tono,
+} from './ui';
+import { Plus, Trash, ClipboardText, PencilSimple, Copy, Check, ShoppingBag } from '@phosphor-icons/react';
 
-interface PedidosViewProps {
-  pedidos: Pedido[];
-  recetas: Receta[];
-  insumos: Insumo[];
-  insumosMap: Map<string, Insumo>;
-  onCrearPedido: (pedido: Omit<Pedido, 'id'>) => Promise<void>;
-  onCambiarEstadoPedido: (id: string, estado: Pedido['estado']) => Promise<void>;
-  onEliminarPedido: (id: string) => Promise<void>;
+const ESTADO: Record<EstadoPedido, { texto: string; tono: Tono }> = {
+  pendiente: { texto: 'Por preparar', tono: 'neutro' },
+  en_preparacion: { texto: 'Preparando', tono: 'warn' },
+  listo: { texto: 'Listo para entregar', tono: 'ok' },
+  entregado: { texto: 'Entregado', tono: 'neutro' },
+};
+
+const SIGUIENTE: Record<EstadoPedido, { estado: EstadoPedido; accion: string } | null> = {
+  pendiente: { estado: 'en_preparacion', accion: 'Empezar a preparar' },
+  en_preparacion: { estado: 'listo', accion: 'Ya está listo' },
+  listo: { estado: 'entregado', accion: 'Entregado y pagado' },
+  entregado: null,
+};
+
+const TONO_FECHA: Record<string, Tono> = {
+  atrasado: 'bad',
+  hoy: 'berry',
+  pronto: 'warn',
+  normal: 'neutro',
+};
+
+/* -------------------------------------------------------------------------- */
+/* Tarjeta de un pedido: qué es, cuánto falta cobrar y el siguiente paso       */
+/* -------------------------------------------------------------------------- */
+
+export function TarjetaPedido({
+  pedido,
+  onCambiarEstado,
+  onEditar,
+}: {
+  pedido: Pedido;
+  onCambiarEstado: (pedido: Pedido, estado: EstadoPedido) => void;
+  onEditar: (pedido: Pedido) => void;
+}) {
+  const fecha = describirFecha(pedido.fecha_entrega);
+  const entregado = pedido.estado === 'entregado';
+  const faltaCobrar = Math.max(0, pedido.precio_venta_total - pedido.seña_pagada);
+  const siguiente = SIGUIENTE[pedido.estado];
+
+  return (
+    <article className="card p-4 sm:p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        {!entregado && <Etiqueta tono={TONO_FECHA[fecha.tono]}>{fecha.texto}</Etiqueta>}
+        <Etiqueta tono={ESTADO[pedido.estado].tono}>{ESTADO[pedido.estado].texto}</Etiqueta>
+        <button
+          type="button"
+          onClick={() => onEditar(pedido)}
+          aria-label={`Editar pedido de ${pedido.cliente_nombre}`}
+          className="-my-1 -mr-2 ml-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft hover:bg-sunken hover:text-ink"
+        >
+          <PencilSimple size={18} />
+        </button>
+      </div>
+
+      <h3 className="mt-2 text-[1.0625rem] font-bold leading-snug">{pedido.cliente_nombre}</h3>
+      <p className="text-[0.9375rem] text-ink-soft">
+        <span className="num">{pedido.unidades_totales}</span> × {pedido.receta_nombre_snapshot}
+        {entregado && ` · ${fecha.texto.replace('Atrasado · ', '')}`}
+      </p>
+      {pedido.notas && <p className="mt-1 text-sm text-ink-soft">“{pedido.notas}”</p>}
+
+      <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-line pt-3">
+        <div className="num text-sm text-ink-soft">
+          Total {formatearMoneda(pedido.precio_venta_total)}
+          {pedido.seña_pagada > 0 && !entregado && ` · abonó ${formatearMoneda(pedido.seña_pagada)}`}
+          <div className="text-[0.9375rem] font-bold text-ink">
+            {entregado
+              ? `Ganaste ${formatearMoneda(pedido.ganancia_neta)}`
+              : faltaCobrar > 0
+                ? `Falta cobrar ${formatearMoneda(faltaCobrar)}`
+                : 'Ya está pagado'}
+          </div>
+        </div>
+        {siguiente ? (
+          <button
+            type="button"
+            className={`btn btn-sm ${siguiente.estado === 'entregado' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => onCambiarEstado(pedido, siguiente.estado)}
+          >
+            {siguiente.accion}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() => onCambiarEstado(pedido, 'listo')}
+          >
+            Deshacer entrega
+          </button>
+        )}
+      </div>
+    </article>
+  );
 }
 
-export default function PedidosView({
-  pedidos,
+/* -------------------------------------------------------------------------- */
+/* Formulario para anotar o editar un pedido                                   */
+/* -------------------------------------------------------------------------- */
+
+export function PedidoFormSheet({
+  pedidoInicial,
+  recetaInicialId,
   recetas,
-  insumos,
   insumosMap,
-  onCrearPedido,
-  onCambiarEstadoPedido,
-  onEliminarPedido,
-}: PedidosViewProps) {
-  const [clienteNombre, setClienteNombre] = useState('');
-  const [recetaIdSeleccionada, setRecetaIdSeleccionada] = useState<string>(
-    recetas[0]?.id || ''
+  onClose,
+  onGuardar,
+  onEliminar,
+}: {
+  pedidoInicial?: Pedido | null;
+  recetaInicialId?: string;
+  recetas: Receta[];
+  insumosMap: Map<string, Insumo>;
+  onClose: () => void;
+  onGuardar: (pedido: Omit<Pedido, 'id'> & { id?: string }) => Promise<void>;
+  onEliminar?: (id: string) => Promise<void>;
+}) {
+  const recetaDePartida =
+    recetas.find((r) => r.id === (pedidoInicial?.receta_id || recetaInicialId)) || recetas[0];
+
+  const [cliente, setCliente] = useState(pedidoInicial?.cliente_nombre || '');
+  const [recetaId, setRecetaId] = useState(recetaDePartida?.id || '');
+  const [unidades, setUnidades] = useState(
+    pedidoInicial
+      ? String(pedidoInicial.unidades_totales)
+      : String(
+          recetaDePartida
+            ? recetaDePartida.unidades_por_pack > 1
+              ? recetaDePartida.unidades_por_pack
+              : recetaDePartida.rendimiento_cantidad
+            : ''
+        )
   );
-  const [cantidadLotes, setCantidadLotes] = useState<number>(1);
-  const [fechaEntrega, setFechaEntrega] = useState<string>(
-    new Date().toISOString().split('T')[0]
+  const [fecha, setFecha] = useState(pedidoInicial?.fecha_entrega || hoyISO());
+  const [precio, setPrecio] = useState(
+    pedidoInicial ? String(pedidoInicial.precio_venta_total) : ''
   );
-  const [precioVentaPersonalizado, setPrecioVentaPersonalizado] = useState<string>('');
-  const [señaPagada, setSeñaPagada] = useState<number>(0);
-  const [notas, setNotas] = useState('');
+  const [abono, setAbono] = useState(
+    pedidoInicial && pedidoInicial.seña_pagada > 0 ? String(pedidoInicial.seña_pagada) : ''
+  );
+  const [notas, setNotas] = useState(pedidoInicial?.notas || '');
+  const [intento, setIntento] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [confirmarBorrado, setConfirmarBorrado] = useState(false);
 
-  const recetaSeleccionada = useMemo(
-    () => recetas.find((r) => r.id === recetaIdSeleccionada) || recetas[0],
-    [recetas, recetaIdSeleccionada]
+  const receta = recetas.find((r) => r.id === recetaId) || recetaDePartida;
+  const unidadesNum = Number(unidades) || 0;
+  const factor = receta && unidadesNum > 0 ? unidadesNum / (receta.rendimiento_cantidad || 1) : 1;
+
+  const resumen = useMemo(
+    () => (receta ? calcularCostosReceta(receta, insumosMap, factor) : null),
+    [receta, insumosMap, factor]
   );
 
-  const resumenSimulado = useMemo(() => {
-    if (!recetaSeleccionada) return null;
-    return calcularCostosReceta(recetaSeleccionada, insumosMap, cantidadLotes);
-  }, [recetaSeleccionada, insumosMap, cantidadLotes]);
+  const precioSugerido = Math.round(resumen?.precioVentaLote || 0);
+  const precioFinal = Number(precio) > 0 ? Number(precio) : precioSugerido;
+  const costo = Math.round(resumen?.costoTotalLote || 0);
+  const ganancia = precioFinal - costo;
+  const unidPack = receta ? Math.max(1, receta.unidades_por_pack) : 1;
+  const atajos = receta
+    ? unidPack > 1
+      ? [1, 2, 3, 4].map((n) => n * unidPack)
+      : [0.5, 1, 2, 3]
+          .map((n) => Math.round(receta.rendimiento_cantidad * n))
+          .filter((n, i, arr) => n > 0 && arr.indexOf(n) === i)
+    : [];
 
-  const precioFinalPedido = useMemo(() => {
-    if (precioVentaPersonalizado !== '' && Number(precioVentaPersonalizado) > 0) {
-      return Number(precioVentaPersonalizado);
-    }
-    return resumenSimulado?.precioVentaLote || 0;
-  }, [precioVentaPersonalizado, resumenSimulado]);
+  const errores = {
+    cliente: !cliente.trim() ? 'Anota para quién es.' : '',
+    unidades: unidadesNum <= 0 ? 'Indica cuántas unidades.' : '',
+  };
 
-  const gananciaFinalPedido = useMemo(() => {
-    if (!resumenSimulado) return 0;
-    return precioFinalPedido - resumenSimulado.costoTotalLote;
-  }, [precioFinalPedido, resumenSimulado]);
-
-  const handleSubmitPedido = async (e: React.FormEvent) => {
+  const guardar = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clienteNombre.trim() || !recetaSeleccionada || !resumenSimulado) return;
+    setIntento(true);
+    if (!receta || errores.cliente || errores.unidades) return;
     setGuardando(true);
     try {
-      await onCrearPedido({
-        cliente_nombre: clienteNombre,
-        fecha_entrega: fechaEntrega,
-        estado: 'pendiente',
-        receta_id: recetaSeleccionada.id,
-        receta_nombre_snapshot: recetaSeleccionada.nombre,
-        cantidad_lotes: cantidadLotes,
-        unidades_totales: resumenSimulado.rendimientoEscalado,
-        costo_total_estimado: Math.round(resumenSimulado.costoTotalLote),
-        precio_venta_total: Math.round(precioFinalPedido),
-        ganancia_neta: Math.round(gananciaFinalPedido),
-        seña_pagada: Number(señaPagada) || 0,
+      await onGuardar({
+        id: pedidoInicial?.id,
+        cliente_nombre: cliente,
+        fecha_entrega: fecha,
+        estado: pedidoInicial?.estado || 'pendiente',
+        receta_id: receta.id,
+        receta_nombre_snapshot: receta.nombre,
+        cantidad_lotes: factor,
+        unidades_totales: unidadesNum,
+        costo_total_estimado: costo,
+        precio_venta_total: precioFinal,
+        ganancia_neta: ganancia,
+        seña_pagada: Number(abono) || 0,
         notas,
       });
-      setClienteNombre('');
-      setPrecioVentaPersonalizado('');
-      setSeñaPagada(0);
-      setNotas('');
+      onClose();
     } finally {
       setGuardando(false);
     }
   };
 
-  // Totales de pedidos activos
-  const metricasPedidos = useMemo(() => {
-    let ventaTotal = 0;
-    let costoTotal = 0;
-    let gananciaTotal = 0;
-    let pendienteCobrar = 0;
-
-    for (const p of pedidos) {
-      ventaTotal += p.precio_venta_total;
-      costoTotal += p.costo_total_estimado;
-      gananciaTotal += p.ganancia_neta;
-      if (p.estado !== 'entregado') {
-        pendienteCobrar += Math.max(0, p.precio_venta_total - p.seña_pagada);
-      }
-    }
-    return { ventaTotal, costoTotal, gananciaTotal, pendienteCobrar };
-  }, [pedidos]);
-
-  // Lista de compras inteligente sumando los insumos de pedidos pendientes/en_preparacion
-  const listaCompras = useMemo(() => {
-    const mapaNecesidades = new Map<
-      string,
-      {
-        insumo: Insumo;
-        cantidadNecesariaBase: number;
-        unidadBase: string;
-      }
-    >();
-
-    const pedidosPorCocinar = pedidos.filter(
-      (p) => p.estado === 'pendiente' || p.estado === 'en_preparacion'
+  if (confirmarBorrado && pedidoInicial && onEliminar) {
+    return (
+      <Confirmar
+        titulo={`¿Eliminar el pedido de ${pedidoInicial.cliente_nombre}?`}
+        onCancelar={() => setConfirmarBorrado(false)}
+        onConfirmar={async () => {
+          await onEliminar(pedidoInicial.id);
+          onClose();
+        }}
+      />
     );
-
-    for (const ped of pedidosPorCocinar) {
-      const rec = recetas.find((r) => r.id === ped.receta_id);
-      if (!rec) continue;
-      for (const item of rec.items) {
-        const ins = insumosMap.get(item.insumo_id);
-        if (!ins) continue;
-        const { valor: cantBase, base } = convertirAUnidadBase(
-          item.cantidad * ped.cantidad_lotes,
-          item.unidad
-        );
-        const actual = mapaNecesidades.get(ins.id);
-        if (actual) {
-          actual.cantidadNecesariaBase += cantBase;
-        } else {
-          mapaNecesidades.set(ins.id, {
-            insumo: ins,
-            cantidadNecesariaBase: cantBase,
-            unidadBase: base,
-          });
-        }
-      }
-    }
-
-    return Array.from(mapaNecesidades.values()).map((entry) => {
-      const { valor: stockBase } = convertirAUnidadBase(
-        entry.insumo.stock_actual,
-        entry.insumo.unidad
-      );
-      const faltanteBase = Math.max(0, entry.cantidadNecesariaBase - stockBase);
-      return {
-        ...entry,
-        stockBase,
-        faltanteBase,
-        alcanza: faltanteBase === 0,
-      };
-    });
-  }, [pedidos, recetas, insumosMap]);
+  }
 
   return (
-    <div className="space-y-5">
-      {/* Resumen Financiero de Pedidos */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bezel-shell">
-          <div className="bezel-core p-4">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#7A4957]">
-              Total Ventas Pedidos
-            </span>
-            <div className="font-nums text-xl sm:text-2xl font-extrabold text-[#2B1118] mt-1">
-              {formatearMoneda(metricasPedidos.ventaTotal)}
+    <Sheet
+      titulo={pedidoInicial ? 'Editar pedido' : 'Nuevo pedido'}
+      onClose={onClose}
+      pie={
+        <div>
+          {resumen && unidadesNum > 0 && (
+            <div className="num mb-3 flex items-baseline justify-between text-sm">
+              <span className="text-ink-soft">Te cuesta {formatearMoneda(costo)}</span>
+              <span className={`font-bold ${ganancia > 0 ? 'text-ok' : 'text-bad'}`}>
+                {ganancia >= 0 ? 'Ganas' : 'Pierdes'} {formatearMoneda(Math.abs(ganancia))}
+              </span>
             </div>
-            <div className="text-[11px] text-[#7A4957] mt-1">
-              En {pedidos.length} pedidos registrados
-            </div>
-          </div>
-        </div>
-
-        <div className="bezel-shell">
-          <div className="bezel-core p-4">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#BE123C]">
-              Costo Masa + Empaque
-            </span>
-            <div className="font-nums text-xl sm:text-2xl font-bold text-[#BE123C] mt-1">
-              {formatearMoneda(metricasPedidos.costoTotal)}
-            </div>
-            <div className="text-[11px] text-[#7A4957] mt-1">
-              Inversión total de producción
-            </div>
-          </div>
-        </div>
-
-        <div className="bezel-shell">
-          <div className="bezel-core p-4 bg-[#F0FDF4]/60">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#15803D]">
-              Tu Ganancia Limpia
-            </span>
-            <div className="font-nums text-xl sm:text-2xl font-extrabold text-[#15803D] mt-1">
-              +{formatearMoneda(metricasPedidos.gananciaTotal)}
-            </div>
-            <div className="text-[11px] text-[#166534] mt-1">
-              Dinero libre para vos
-            </div>
-          </div>
-        </div>
-
-        <div className="bezel-shell">
-          <div className="bezel-core p-4">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#B45309]">
-              Saldo a Cobrar en Entregas
-            </span>
-            <div className="font-nums text-xl sm:text-2xl font-bold text-[#B45309] mt-1">
-              {formatearMoneda(metricasPedidos.pendienteCobrar)}
-            </div>
-            <div className="text-[11px] text-[#7A4957] mt-1">
-              Descontando señas recibidas
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Columna Izquierda: Presupuestador y Nuevo Pedido */}
-        <div className="lg:col-span-5 bezel-shell h-fit">
-          <div className="bezel-core p-5">
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#FFE4E9] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#BE123C]">
-              <Sparkle size={12} weight="fill" />
-              Calculadora de Pedido
-            </span>
-            <h3 className="font-editorial text-xl font-bold text-[#2B1118] mt-1.5">
-              Cotizar y Agendar Pedido
-            </h3>
-            <p className="text-xs text-[#7A4957] mt-0.5">
-              Elegí qué te pidieron y mirá al instante cuánto te cuesta la masa + empaque y cuánto ganás.
-            </p>
-
-            <form onSubmit={handleSubmitPedido} className="mt-4 space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                  Nombre de la Clienta / Evento *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Martina (Caja de Donas Cumple)"
-                  value={clienteNombre}
-                  onChange={(e) => setClienteNombre(e.target.value)}
-                  className="w-full rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-3.5 py-2.5 text-sm text-[#2B1118]"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                    Receta / Producto
-                  </label>
-                  <select
-                    value={recetaSeleccionada?.id || ''}
-                    onChange={(e) => {
-                      setRecetaIdSeleccionada(e.target.value);
-                      setPrecioVentaPersonalizado('');
-                    }}
-                    className="w-full rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-3 py-2.5 text-xs font-bold text-[#2B1118]"
-                  >
-                    {recetas.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.nombre} ({r.rendimiento_cantidad} {r.rendimiento_unidad})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                    Cantidad de Lotes
-                  </label>
-                  <select
-                    value={cantidadLotes}
-                    onChange={(e) => {
-                      setCantidadLotes(Number(e.target.value));
-                      setPrecioVentaPersonalizado('');
-                    }}
-                    className="w-full font-nums rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-3 py-2.5 text-xs font-bold text-[#BE123C]"
-                  >
-                    <option value={0.5}>
-                      ½ Lote ({Math.round((recetaSeleccionada?.rendimiento_cantidad || 12) * 0.5)}{' '}
-                      {recetaSeleccionada?.rendimiento_unidad})
-                    </option>
-                    <option value={1}>
-                      1 Lote ({recetaSeleccionada?.rendimiento_cantidad}{' '}
-                      {recetaSeleccionada?.rendimiento_unidad})
-                    </option>
-                    <option value={1.5}>
-                      1.5 Lotes ({Math.round((recetaSeleccionada?.rendimiento_cantidad || 12) * 1.5)}{' '}
-                      {recetaSeleccionada?.rendimiento_unidad})
-                    </option>
-                    <option value={2}>
-                      2 Lotes ({(recetaSeleccionada?.rendimiento_cantidad || 12) * 2}{' '}
-                      {recetaSeleccionada?.rendimiento_unidad})
-                    </option>
-                    <option value={3}>
-                      3 Lotes ({(recetaSeleccionada?.rendimiento_cantidad || 12) * 3}{' '}
-                      {recetaSeleccionada?.rendimiento_unidad})
-                    </option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Resumen automático de costos del pedido */}
-              {resumenSimulado && (
-                <div className="rounded-2xl bg-[#FFF0F3] border border-[#F3C6D3] p-3.5 space-y-1.5 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-[#7A4957]">Costo Masa + Relleno:</span>
-                    <span className="font-nums font-semibold text-[#2B1118]">
-                      {formatearMoneda(resumenSimulado.costoIngredientesTotal)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[#7A4957]">Costo Empaque + Extras:</span>
-                    <span className="font-nums font-semibold text-[#2B1118]">
-                      {formatearMoneda(
-                        resumenSimulado.costoEmpaque + resumenSimulado.costoGastosExtras
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between pt-1 border-t border-[#F3C6D3]">
-                    <span className="font-bold text-[#2B1118]">Costo Total de hacer este pedido:</span>
-                    <span className="font-nums font-bold text-[#BE123C]">
-                      {formatearMoneda(resumenSimulado.costoTotalLote)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold text-[#15803D]">Ganancia neta que te queda:</span>
-                    <span className="font-nums font-extrabold text-[#15803D]">
-                      +{formatearMoneda(gananciaFinalPedido)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2.5">
-                <div>
-                  <label className="block text-xs font-bold text-[#BE123C] mb-1">
-                    Precio a Cobrar ($)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder={String(Math.round(resumenSimulado?.precioVentaLote || 0))}
-                    value={precioVentaPersonalizado}
-                    onChange={(e) => setPrecioVentaPersonalizado(e.target.value)}
-                    className="w-full font-nums rounded-xl border-2 border-[#E11D48] bg-white px-2.5 py-2 text-xs font-extrabold text-[#BE123C]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                    Seña recibida ($)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={señaPagada}
-                    onChange={(e) => setSeñaPagada(Number(e.target.value))}
-                    className="w-full font-nums rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-2.5 py-2 text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                    Fecha Entrega
-                  </label>
-                  <input
-                    type="date"
-                    value={fechaEntrega}
-                    onChange={(e) => setFechaEntrega(e.target.value)}
-                    className="w-full rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-2.5 py-2 text-xs font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#2B1118] mb-1">
-                  Detalles / Dedicatoria / Colores
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: 6 donas baño rosa y 6 chocolate blanco..."
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  className="w-full rounded-xl border border-[#F3C6D3] bg-[#FFF9FA] px-3 py-2 text-xs"
-                />
-              </div>
-
+          )}
+          <div className="flex items-center gap-3">
+            {pedidoInicial && onEliminar && (
               <button
-                type="submit"
-                disabled={guardando}
-                className="w-full flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#BE123C] to-[#E11D48] text-white py-3 text-xs sm:text-sm font-bold shadow-md hover:shadow-lg active:scale-[0.99] spring-transition cursor-pointer"
+                type="button"
+                onClick={() => setConfirmarBorrado(true)}
+                aria-label="Eliminar pedido"
+                className="btn btn-secondary px-3 text-bad"
               >
-                <Plus size={17} weight="bold" />
-                <span>
-                  {guardando
-                    ? 'Guardando pedido...'
-                    : `Guardar Pedido (${formatearMoneda(precioFinalPedido)})`}
-                </span>
+                <Trash size={20} />
               </button>
-            </form>
+            )}
+            <button type="button" className="btn btn-secondary flex-1" onClick={onClose}>
+              Cancelar
+            </button>
+            <button type="submit" form="form-pedido" disabled={guardando} className="btn btn-primary flex-1">
+              {guardando ? 'Guardando…' : pedidoInicial ? 'Guardar' : 'Anotar pedido'}
+            </button>
           </div>
         </div>
+      }
+    >
+      <form id="form-pedido" onSubmit={guardar} className="space-y-5" noValidate>
+        <Campo etiqueta="¿Para quién es?" error={intento ? errores.cliente : ''}>
+          <input
+            type="text"
+            autoFocus={!pedidoInicial}
+            placeholder="Ej: Camila, cumpleaños de Sofi"
+            value={cliente}
+            onChange={(e) => setCliente(e.target.value)}
+            className={`input ${intento && errores.cliente ? 'input-error' : ''}`}
+          />
+        </Campo>
 
-        {/* Columna Derecha: Lista de Pedidos + Lista de Compras */}
-        <div className="lg:col-span-7 space-y-5">
-          <div className="bezel-shell">
-            <div className="bezel-core p-5">
-              <h3 className="font-editorial text-xl font-bold text-[#2B1118] pb-3 border-b border-[#F8DCE4]">
-                Agenda de Pedidos y Entregas ({pedidos.length})
-              </h3>
+        <Campo etiqueta="¿Qué te pidió?">
+          <select
+            value={receta?.id || ''}
+            onChange={(e) => {
+              setRecetaId(e.target.value);
+              setPrecio('');
+              const nueva = recetas.find((r) => r.id === e.target.value);
+              if (nueva) {
+                setUnidades(
+                  String(nueva.unidades_por_pack > 1 ? nueva.unidades_por_pack : nueva.rendimiento_cantidad)
+                );
+              }
+            }}
+            className="input"
+          >
+            {recetas.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nombre}
+              </option>
+            ))}
+          </select>
+        </Campo>
 
-              <div className="mt-4 space-y-3">
-                {pedidos.map((ped) => {
-                  const faltaCobrar = Math.max(0, ped.precio_venta_total - ped.seña_pagada);
-                  return (
-                    <div
-                      key={ped.id}
-                      className="rounded-2xl bg-[#FFF9FA] border border-[#F3C6D3] p-4 space-y-3"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-editorial text-base font-bold text-[#2B1118]">
-                              {ped.cliente_nombre}
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#FFE4E9] px-2.5 py-0.5 text-[11px] font-nums font-bold text-[#BE123C]">
-                              <CalendarBlank size={12} />
-                              {ped.fecha_entrega}
-                            </span>
-                          </div>
-                          <div className="text-xs font-semibold text-[#9F1239] mt-0.5">
-                            {ped.receta_nombre_snapshot} ·{' '}
-                            <span className="font-nums">{ped.unidades_totales} u.</span> (
-                            {ped.cantidad_lotes} lote{ped.cantidad_lotes !== 1 ? 's' : ''})
-                          </div>
-                          {ped.notas && (
-                            <p className="text-xs text-[#7A4957] mt-1">{ped.notas}</p>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => onEliminarPedido(ped.id)}
-                          className="w-7 h-7 rounded-full bg-[#FFF0F3] text-[#9F1239] hover:bg-[#FFE4E9] flex items-center justify-center cursor-pointer"
-                          title="Eliminar pedido"
-                        >
-                          <Trash size={14} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-3 gap-2 rounded-xl bg-white border border-[#F5D0DC] p-2.5 text-xs">
-                        <div>
-                          <span className="text-[10px] text-[#7A4957] block">Costo Total</span>
-                          <span className="font-nums font-bold text-[#2B1118]">
-                            {formatearMoneda(ped.costo_total_estimado)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[#7A4957] block">Precio Venta</span>
-                          <span className="font-nums font-bold text-[#BE123C]">
-                            {formatearMoneda(ped.precio_venta_total)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[#15803D] font-bold block">
-                            Ganancia Neta
-                          </span>
-                          <span className="font-nums font-extrabold text-[#15803D]">
-                            +{formatearMoneda(ped.ganancia_neta)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {(
-                            [
-                              { id: 'pendiente', label: 'Pendiente' },
-                              { id: 'en_preparacion', label: 'En cocina' },
-                              { id: 'listo', label: 'Listo en caja' },
-                              { id: 'entregado', label: 'Entregado ✓' },
-                            ] as const
-                          ).map((st) => (
-                            <button
-                              key={st.id}
-                              type="button"
-                              onClick={() => onCambiarEstadoPedido(ped.id, st.id)}
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-bold cursor-pointer spring-transition ${
-                                ped.estado === st.id
-                                  ? st.id === 'entregado'
-                                    ? 'bg-[#16A34A] text-white'
-                                    : 'bg-[#BE123C] text-white'
-                                  : 'bg-[#FFF0F3] text-[#7A4957] hover:bg-[#FFE4E9]'
-                              }`}
-                            >
-                              {st.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        <span className="font-nums text-xs font-semibold text-[#7A4957]">
-                          {faltaCobrar > 0
-                            ? `Resta cobrar: ${formatearMoneda(faltaCobrar)}`
-                            : 'Pagado 100%'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        <Campo
+          etiqueta={`¿Cuántos ${receta?.rendimiento_unidad || 'unidades'}?`}
+          error={intento ? errores.unidades : ''}
+          ayuda={
+            receta && unidPack > 1 && unidadesNum > 0
+              ? `Son ${String(Math.round((unidadesNum / unidPack) * 10) / 10).replace('.', ',')} × ${receta.nombre_pack}.`
+              : undefined
+          }
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={unidades}
+              onChange={(e) => {
+                setUnidades(e.target.value);
+                if (!pedidoInicial) setPrecio('');
+              }}
+              className={`input num w-24 font-semibold ${intento && errores.unidades ? 'input-error' : ''}`}
+            />
+            {atajos.map((n) => (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={unidadesNum === n}
+                onClick={() => {
+                  setUnidades(String(n));
+                  if (!pedidoInicial) setPrecio('');
+                }}
+                className={`btn btn-sm num ${
+                  unidadesNum === n ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
           </div>
+        </Campo>
 
-          {/* Lista de Compras e Insumos Necesarios para los Pedidos */}
-          <div className="bezel-shell">
-            <div className="bezel-core p-5">
-              <div className="flex items-center justify-between pb-3 border-b border-[#F8DCE4]">
-                <div className="flex items-center gap-2">
-                  <ShoppingBag size={20} weight="duotone" className="text-[#BE123C]" />
-                  <div>
-                    <h3 className="font-editorial text-lg font-bold text-[#2B1118]">
-                      Insumos y Empaques Necesarios para Pedidos Activos
-                    </h3>
-                    <p className="text-xs text-[#7A4957]">
-                      Calculado automáticamente según tus pedidos pendientes y en preparación.
-                    </p>
-                  </div>
-                </div>
-              </div>
+        <Campo etiqueta="¿Para cuándo?">
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="input"
+          />
+        </Campo>
 
-              {listaCompras.length === 0 ? (
-                <p className="text-xs text-[#7A4957] py-4 text-center">
-                  No hay pedidos pendientes por cocinar en este momento.
-                </p>
-              ) : (
-                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {listaCompras.map((item) => (
-                    <div
-                      key={item.insumo.id}
-                      className={`rounded-2xl p-3 border flex items-center justify-between gap-2 text-xs ${
-                        item.alcanza
-                          ? 'bg-[#FFF9FA] border-[#F3C6D3]'
-                          : 'bg-[#FEF2F2] border-[#FCA5A5]'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-bold text-[#2B1118]">{item.insumo.nombre}</div>
-                        <div className="text-[11px] text-[#7A4957]">
-                          Necesitás:{' '}
-                          <strong className="font-nums text-[#BE123C]">
-                            {formatearCantidad(item.cantidadNecesariaBase, item.unidadBase)}
-                          </strong>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        {item.alcanza ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] text-[#166534] px-2.5 py-0.5 text-[10px] font-bold">
-                            ✓ Tenés stock
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#FEE2E2] text-[#991B1B] px-2.5 py-0.5 text-[10px] font-bold">
-                            Comprar {formatearCantidad(item.faltanteBase, item.unidadBase)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Campo
+            etiqueta="Total a cobrar"
+            ayuda={
+              precioSugerido > 0
+                ? `Según tu precio: ${formatearMoneda(precioSugerido)}. Cámbialo si acordaste otro.`
+                : undefined
+            }
+          >
+            <CampoDinero
+              value={precio}
+              onChange={setPrecio}
+              placeholder={precioSugerido > 0 ? String(precioSugerido) : '0'}
+            />
+          </Campo>
+          <Campo etiqueta="¿Ya te abonó algo?" ayuda="Déjalo vacío si aún no paga nada.">
+            <CampoDinero value={abono} onChange={setAbono} placeholder="0" />
+          </Campo>
         </div>
+
+        <Campo etiqueta="Notas (opcional)">
+          <input
+            type="text"
+            placeholder={`Ej: sin nueces, retira a las 17:00`}
+            value={notas}
+            onChange={(e) => setNotas(e.target.value)}
+            className="input"
+          />
+        </Campo>
+      </form>
+    </Sheet>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lista de compras                                                            */
+/* -------------------------------------------------------------------------- */
+
+function ListaCompras({ lista, pedidosPorPreparar }: { lista: ItemCompra[]; pedidosPorPreparar: number }) {
+  const [copiada, setCopiada] = useState(false);
+  const faltantes = lista.filter((i) => i.faltante > 0);
+
+  const copiar = async () => {
+    const texto = ['Lista de compras', ...faltantes.map((i) => `- ${i.insumo.nombre}: ${formatearCantidad(i.faltante, i.unidadBase)}`)].join('\n');
+    try {
+      await navigator.clipboard.writeText(texto);
+      setCopiada(true);
+      setTimeout(() => setCopiada(false), 2500);
+    } catch {
+      // El navegador no permitió copiar
+    }
+  };
+
+  if (lista.length === 0) {
+    return (
+      <Vacio
+        icono={<ShoppingBag size={28} weight="duotone" />}
+        titulo="Nada que comprar por ahora"
+        texto="Cuando tengas pedidos por preparar, aquí aparece cuánto necesitas de cada ingrediente, ya sumado."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[0.9375rem] text-ink-soft">
+          Lo que necesitas para {pedidosPorPreparar === 1 ? 'tu pedido' : `tus ${pedidosPorPreparar} pedidos`}{' '}
+          por preparar. Si anotas lo que te queda en casa (en Ingredientes), lo descontamos.
+        </p>
+        {faltantes.length > 0 && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copiar}>
+            {copiada ? <Check size={16} weight="bold" /> : <Copy size={16} />}
+            {copiada ? 'Copiada' : 'Copiar lista'}
+          </button>
+        )}
       </div>
+      <ul className="card divide-y divide-line overflow-hidden">
+        {lista.map((it) => (
+          <li key={it.insumo.id} className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+            <div className="min-w-0">
+              <div className="truncate font-semibold">{it.insumo.nombre}</div>
+              <div className="num text-sm text-ink-soft">
+                Necesitas {formatearCantidad(it.necesario, it.unidadBase)}
+                {it.enCasa > 0 && ` · tienes ${formatearCantidad(it.enCasa, it.unidadBase)}`}
+              </div>
+            </div>
+            {it.faltante > 0 ? (
+              <Etiqueta tono="berry">Comprar {formatearCantidad(it.faltante, it.unidadBase)}</Etiqueta>
+            ) : (
+              <Etiqueta tono="ok">Te alcanza</Etiqueta>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pantalla de pedidos                                                         */
+/* -------------------------------------------------------------------------- */
+
+export default function PedidosView({
+  pedidos,
+  recetas,
+  insumosMap,
+  pestanaInicial = 'pendientes',
+  onNuevo,
+  onEditar,
+  onCambiarEstado,
+  onCrearProducto,
+}: {
+  pedidos: Pedido[];
+  recetas: Receta[];
+  insumosMap: Map<string, Insumo>;
+  pestanaInicial?: 'pendientes' | 'compras' | 'entregados';
+  onNuevo: () => void;
+  onEditar: (pedido: Pedido) => void;
+  onCambiarEstado: (pedido: Pedido, estado: EstadoPedido) => void;
+  onCrearProducto: () => void;
+}) {
+  const [pestana, setPestana] = useState(pestanaInicial);
+
+  const pendientes = useMemo(
+    () =>
+      pedidos
+        .filter((p) => p.estado !== 'entregado')
+        .sort((a, b) => a.fecha_entrega.localeCompare(b.fecha_entrega)),
+    [pedidos]
+  );
+  const entregados = useMemo(
+    () =>
+      pedidos
+        .filter((p) => p.estado === 'entregado')
+        .sort((a, b) => b.fecha_entrega.localeCompare(a.fecha_entrega)),
+    [pedidos]
+  );
+  const lista = useMemo(
+    () => calcularListaCompras(pedidos, recetas, insumosMap),
+    [pedidos, recetas, insumosMap]
+  );
+  const porPreparar = pedidos.filter(
+    (p) => p.estado === 'pendiente' || p.estado === 'en_preparacion'
+  ).length;
+
+  const sinProductos = recetas.length === 0;
+
+  return (
+    <div className="space-y-6">
+      <EncabezadoVista
+        titulo="Pedidos"
+        ayuda="Lo que tienes que entregar, cuándo, y cuánto te falta cobrar."
+      >
+        {pedidos.length > 0 && (
+          <button type="button" className="btn btn-primary" onClick={onNuevo}>
+            <Plus size={18} weight="bold" />
+            Nuevo pedido
+          </button>
+        )}
+      </EncabezadoVista>
+
+      {pedidos.length === 0 ? (
+        sinProductos ? (
+          <Vacio
+            icono={<ClipboardText size={28} weight="duotone" />}
+            titulo="Primero crea un producto"
+            texto="Para anotar un pedido necesitamos saber qué vendes. Crea tu primer producto y vuelve aquí."
+          >
+            <button type="button" className="btn btn-primary" onClick={onCrearProducto}>
+              <Plus size={18} weight="bold" />
+              Crear producto
+            </button>
+          </Vacio>
+        ) : (
+          <Vacio
+            icono={<ClipboardText size={28} weight="duotone" />}
+            titulo="Anota tu primer pedido"
+            texto="Dinos quién te pidió qué y para cuándo. Te mostramos cuánto ganas, qué tienes que comprar y te recordamos lo que falta cobrar."
+          >
+            <button type="button" className="btn btn-primary" onClick={onNuevo}>
+              <Plus size={18} weight="bold" />
+              Nuevo pedido
+            </button>
+          </Vacio>
+        )
+      ) : (
+        <>
+          <Segmentos
+            className="sm:w-[30rem]"
+            opciones={[
+              { id: 'pendientes', etiqueta: 'Por entregar', cuenta: pendientes.length },
+              {
+                id: 'compras',
+                etiqueta: 'Qué comprar',
+                cuenta: lista.filter((i) => i.faltante > 0).length,
+              },
+              { id: 'entregados', etiqueta: 'Entregados' },
+            ]}
+            valor={pestana}
+            onChange={setPestana}
+          />
+
+          {pestana === 'pendientes' &&
+            (pendientes.length === 0 ? (
+              <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                No tienes pedidos por entregar. ¡Todo al día!
+              </p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {pendientes.map((p) => (
+                  <TarjetaPedido key={p.id} pedido={p} onCambiarEstado={onCambiarEstado} onEditar={onEditar} />
+                ))}
+              </div>
+            ))}
+
+          {pestana === 'compras' && <ListaCompras lista={lista} pedidosPorPreparar={porPreparar} />}
+
+          {pestana === 'entregados' &&
+            (entregados.length === 0 ? (
+              <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                Aún no marcas ningún pedido como entregado.
+              </p>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {entregados.map((p) => (
+                  <TarjetaPedido key={p.id} pedido={p} onCambiarEstado={onCambiarEstado} onEditar={onEditar} />
+                ))}
+              </div>
+            ))}
+        </>
+      )}
     </div>
   );
 }

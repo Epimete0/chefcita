@@ -4,6 +4,7 @@ import {
   RecetaItem,
   ResumenCostosReceta,
   UnidadMedida,
+  Pedido,
   EstadoSaludPrecio,
   DesgloseItemCosto,
 } from './types';
@@ -14,7 +15,10 @@ import {
  * - l -> ml (x1000)
  * - g, ml, u, cm -> x1
  */
-export function convertirAUnidadBase(cantidad: number, unidad: UnidadMedida): { valor: number; base: 'g' | 'ml' | 'u' | 'cm' } {
+export function convertirAUnidadBase(
+  cantidad: number,
+  unidad: UnidadMedida
+): { valor: number; base: 'g' | 'ml' | 'u' | 'cm' } {
   switch (unidad) {
     case 'kg':
       return { valor: cantidad * 1000, base: 'g' };
@@ -33,7 +37,7 @@ export function convertirAUnidadBase(cantidad: number, unidad: UnidadMedida): { 
 }
 
 /**
- * Calcula el costo por unidad base (ej. $/g, $/ml, $/u, $/cm) y también el costo en la unidad de compra
+ * Calcula el costo por unidad base ($/g, $/ml, $/u, $/cm) y una etiqueta fácil de leer
  */
 export function obtenerCostoUnitarioInsumo(insumo: Insumo): {
   costoPorUnidadCompra: number;
@@ -50,16 +54,13 @@ export function obtenerCostoUnitarioInsumo(insumo: Insumo): {
 
   let etiquetaCostoLegible = '';
   if (unidadBase === 'g') {
-    const por100g = costoPorUnidadBase * 100;
-    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase, true)} / g (${formatearMoneda(por100g)} cada 100g)`;
+    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase * 100)} cada 100 g`;
   } else if (unidadBase === 'ml') {
-    const por100ml = costoPorUnidadBase * 100;
-    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase, true)} / ml (${formatearMoneda(por100ml)} cada 100ml)`;
+    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase * 100)} cada 100 ml`;
   } else if (unidadBase === 'cm') {
-    const porMetro = costoPorUnidadBase * 100;
-    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase, true)} / cm (${formatearMoneda(porMetro)} el metro)`;
+    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase * 100)} el metro`;
   } else {
-    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase)} c/u`;
+    etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase)} cada uno`;
   }
 
   return {
@@ -88,13 +89,13 @@ export function calcularCostoItemReceta(
     return cantItemBase * costoPorUnidadBase;
   }
 
-  // Fallback directo si el usuario mezcló unidades distintas
+  // Respaldo si se mezclaron unidades distintas
   const cantPaquete = Number(insumo.cantidad_paquete) || 1;
   return cantidadEscalada * ((Number(insumo.precio_compra) || 0) / cantPaquete);
 }
 
 /**
- * Redondea un precio sugerido al múltiplo de 50 o 100 más cercano para que sea comercialmente limpio
+ * Redondea un precio sugerido para que sea cómodo de cobrar
  */
 export function redondearPrecioComercial(valor: number): number {
   if (valor <= 0) return 0;
@@ -104,10 +105,16 @@ export function redondearPrecioComercial(valor: number): number {
   return Math.ceil(valor / 100) * 100;
 }
 
+/** Precio que deja el margen indicado (porcentaje del precio de venta) */
+export function precioParaMargen(costo: number, margenPorcentaje: number): number {
+  const margen = Math.min(Math.max(margenPorcentaje, 5), 90);
+  return redondearPrecioComercial(costo / (1 - margen / 100));
+}
+
 /**
  * Calcula todo el desglose de costos de una receta:
  * - Masa vs Relleno/Cobertura vs Empaque vs Gastos Extras
- * - Costo por unidad, por pack (ej. Caja x6) y por lote completo
+ * - Costo por unidad, por pack y por preparación completa
  * - Diagnóstico de ganancia y sugerencia de precios
  */
 export function calcularCostosReceta(
@@ -130,7 +137,7 @@ export function calcularCostosReceta(
   const itemsEmpaque: DesgloseItemCosto[] = [];
 
   for (const item of receta.items || []) {
-    const insumo = item.insumo || insumosMap.get(item.insumo_id);
+    const insumo = insumosMap.get(item.insumo_id) || item.insumo;
     const cantidadEscalada = (Number(item.cantidad) || 0) * escala;
     const costoItem = calcularCostoItemReceta(item, insumo, escala);
 
@@ -162,7 +169,6 @@ export function calcularCostosReceta(
   const costoTotalLote =
     costoMasa + costoRellenoCobertura + costoEmpaque + costoGastosExtras + costoManoObra;
 
-  // Actualizar porcentajes de cada item sobre el costo total
   const todosItems = [...itemsMasa, ...itemsRelleno, ...itemsEmpaque];
   for (const d of todosItems) {
     d.porcentajeDelTotal = costoTotalLote > 0 ? (d.costoItem / costoTotalLote) * 100 : 0;
@@ -202,19 +208,20 @@ export function calcularCostosReceta(
 
   let estadoSalud: EstadoSaludPrecio = 'correcto';
   let mensajeDiagnostico = '';
+  const pack = (receta.nombre_pack || 'unidad').toLowerCase();
 
   if (gananciaPorLote <= 0) {
     estadoSalud = 'perdida';
-    mensajeDiagnostico = `¡Atención! A este precio perdés plata. Tu costo por ${receta.nombre_pack.toLowerCase()} es ${formatearMoneda(costoPorPack)}. Subilo al menos a ${formatearMoneda(precioSugeridoPack)}.`;
+    mensajeDiagnostico = `Con este precio pierdes dinero: hacer cada ${pack} te cuesta ${formatearMoneda(costoPorPack)}. Súbelo al menos a ${formatearMoneda(precioSugeridoPack)}.`;
   } else if (margenRealPorcentaje < 38) {
     estadoSalud = 'bajo';
-    mensajeDiagnostico = `Ganancia ajustada (${Math.round(margenRealPorcentaje)}%). Cubrís masa y empaque, pero te queda poco por tu tiempo. Te sugerimos vender cada ${receta.nombre_pack.toLowerCase()} a ${formatearMoneda(precioSugeridoPack)}.`;
+    mensajeDiagnostico = `Cubres los costos, pero queda poco por tu trabajo. Un buen precio sería ${formatearMoneda(precioSugeridoPack)}.`;
   } else if (margenRealPorcentaje < 55) {
     estadoSalud = 'correcto';
-    mensajeDiagnostico = `¡Precio saludable! Cubrís el costo de masa (${formatearMoneda(costoMasa)}), relleno (${formatearMoneda(costoRellenoCobertura)}) y empaque (${formatearMoneda(costoEmpaque)}), ganando ${formatearMoneda(gananciaPorPack)} limpios por ${receta.nombre_pack.toLowerCase()}.`;
+    mensajeDiagnostico = `Buen precio: te quedan ${formatearMoneda(gananciaPorPack)} por cada ${pack}.`;
   } else {
     estadoSalud = 'excelente';
-    mensajeDiagnostico = `¡Excelente rentabilidad (${Math.round(margenRealPorcentaje)}% de margen | x${multiplicadorSobreCosto.toFixed(1)})! Ganás ${formatearMoneda(gananciaPorPack)} limpios por cada ${receta.nombre_pack.toLowerCase()} (${formatearMoneda(gananciaPorLote)} por lote).`;
+    mensajeDiagnostico = `Muy buen precio: te quedan ${formatearMoneda(gananciaPorPack)} por cada ${pack}.`;
   }
 
   return {
@@ -252,29 +259,143 @@ export function calcularCostosReceta(
   };
 }
 
+const FORMATO_PESOS = new Intl.NumberFormat('es-CL', {
+  maximumFractionDigits: 0,
+  useGrouping: 'always',
+} as Intl.NumberFormatOptions);
+
 /**
- * Formatea valores en pesos de manera clara y amigable
+ * Formatea valores en pesos chilenos (sin decimales): $12.500
  */
-export function formatearMoneda(valor: number, conDecimales: boolean = false): string {
-  const num = Number(valor) || 0;
-  if (conDecimales || (num > 0 && num < 10)) {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS',
-      minimumFractionDigits: num < 10 ? 2 : 0,
-      maximumFractionDigits: 2,
-    }).format(num);
-  }
-  return new Intl.NumberFormat('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(Math.round(num));
+export function formatearMoneda(valor: number): string {
+  const num = Math.round(Number(valor) || 0);
+  return `${num < 0 ? '-' : ''}$${FORMATO_PESOS.format(Math.abs(num))}`;
 }
 
+function limpiarNumero(num: number): string {
+  const redondeado = Math.round(num * 100) / 100;
+  return String(redondeado).replace('.', ',');
+}
+
+/** Cantidades como se leen en la cocina: 250 g, 1,5 kg, 2 unidades */
 export function formatearCantidad(valor: number, unidad: string): string {
   const num = Number(valor) || 0;
-  const redondeado = Number.isInteger(num) ? num.toString() : num.toFixed(1).replace(/\.0$/, '');
-  return `${redondeado} ${unidad}`;
+  if (unidad === 'g' && num >= 1000) return `${limpiarNumero(num / 1000)} kg`;
+  if (unidad === 'ml' && num >= 1000) return `${limpiarNumero(num / 1000)} l`;
+  if (unidad === 'u') return `${limpiarNumero(num)} ${num === 1 ? 'unidad' : 'unidades'}`;
+  return `${limpiarNumero(num)} ${unidad}`;
+}
+
+/** Unidades que se pueden usar con un insumo según cómo se compra */
+export function unidadesCompatibles(unidad: UnidadMedida): UnidadMedida[] {
+  if (unidad === 'g' || unidad === 'kg') return ['g', 'kg'];
+  if (unidad === 'ml' || unidad === 'l') return ['ml', 'l'];
+  return [unidad];
+}
+
+export const NOMBRE_UNIDAD: Record<UnidadMedida, string> = {
+  g: 'gramos',
+  kg: 'kilos',
+  ml: 'mililitros',
+  l: 'litros',
+  u: 'unidades',
+  cm: 'centímetros',
+};
+
+/** Fecha de hoy en formato AAAA-MM-DD según la hora local (no UTC) */
+export function hoyISO(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+function fechaLocal(fechaISO: string): Date | null {
+  const [a, m, d] = (fechaISO || '').split('-').map(Number);
+  if (!a || !m || !d) return null;
+  return new Date(a, m - 1, d);
+}
+
+const FORMATO_DIA = new Intl.DateTimeFormat('es-CL', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+});
+
+export type TonoFecha = 'atrasado' | 'hoy' | 'pronto' | 'normal';
+
+/** Convierte una fecha de entrega en algo que se lee de un vistazo: Hoy, Mañana, vie 20 nov */
+export function describirFecha(fechaISO: string): {
+  texto: string;
+  tono: TonoFecha;
+  dias: number;
+} {
+  const fecha = fechaLocal(fechaISO);
+  if (!fecha) return { texto: 'Sin fecha', tono: 'normal', dias: 9999 };
+  const hoy = fechaLocal(hoyISO())!;
+  const dias = Math.round((fecha.getTime() - hoy.getTime()) / 86400000);
+  const corta = FORMATO_DIA.format(fecha).split('.').join('');
+  if (dias < 0) return { texto: `Atrasado · ${corta}`, tono: 'atrasado', dias };
+  if (dias === 0) return { texto: 'Hoy', tono: 'hoy', dias };
+  if (dias === 1) return { texto: 'Mañana', tono: 'pronto', dias };
+  return { texto: corta, tono: 'normal', dias };
+}
+
+export interface ItemCompra {
+  insumo: Insumo;
+  unidadBase: string;
+  necesario: number;
+  enCasa: number;
+  faltante: number;
+}
+
+/**
+ * Suma lo que hace falta para todos los pedidos que aún no se preparan
+ * y lo compara con lo que hay en casa.
+ */
+export function calcularListaCompras(
+  pedidos: Pedido[],
+  recetas: Receta[],
+  insumosMap: Map<string, Insumo>
+): ItemCompra[] {
+  const mapa = new Map<string, ItemCompra>();
+  const porCocinar = pedidos.filter(
+    (p) => p.estado === 'pendiente' || p.estado === 'en_preparacion'
+  );
+
+  for (const ped of porCocinar) {
+    const rec = recetas.find((r) => r.id === ped.receta_id);
+    if (!rec) continue;
+    for (const item of rec.items) {
+      const ins = insumosMap.get(item.insumo_id);
+      if (!ins) continue;
+      const { valor, base } = convertirAUnidadBase(
+        (Number(item.cantidad) || 0) * (Number(ped.cantidad_lotes) || 1),
+        item.unidad
+      );
+      const actual = mapa.get(ins.id);
+      if (actual) {
+        actual.necesario += valor;
+      } else {
+        const { valor: enCasa } = convertirAUnidadBase(Number(ins.stock_actual) || 0, ins.unidad);
+        mapa.set(ins.id, { insumo: ins, unidadBase: base, necesario: valor, enCasa, faltante: 0 });
+      }
+    }
+  }
+
+  return Array.from(mapa.values())
+    .map((it) => ({ ...it, faltante: Math.max(0, it.necesario - it.enCasa) }))
+    .sort(
+      (a, b) =>
+        Number(b.faltante > 0) - Number(a.faltante > 0) ||
+        a.insumo.nombre.localeCompare(b.insumo.nombre)
+    );
+}
+
+/** "brownies" -> "brownie" (para frases como "por cada brownie") */
+export function singular(palabra: string): string {
+  const p = (palabra || 'unidad').trim();
+  if (/(d|l|n|r|z)es$/i.test(p) && p.length > 4) return p.slice(0, -2);
+  if (/s$/i.test(p) && p.length > 2) return p.slice(0, -1);
+  return p;
 }
