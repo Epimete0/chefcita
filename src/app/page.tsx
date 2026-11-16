@@ -204,16 +204,20 @@ export default function ChefcitaApp() {
   return (
     <div className="min-h-[100dvh] pb-24 md:pb-12">
       {/* Barra superior */}
-      <header className="sticky top-0 z-30 border-b border-line bg-paper/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-6 px-4 sm:px-6">
           <button
             type="button"
             onClick={() => irA('inicio')}
-            className="flex cursor-pointer items-center gap-2"
+            className="group flex cursor-pointer items-center gap-2.5 rounded-xl py-1 pr-2 transition-transform duration-150 active:scale-[0.98]"
             aria-label="Chefcita, ir al inicio"
           >
-            <span className="h-3 w-3 rounded-full bg-berry" />
-            <span className="font-display text-[1.375rem] font-semibold">Chefcita</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-berry text-white shadow-[0_2px_8px_rgba(176,32,63,0.28)] transition-transform duration-200 group-hover:scale-105">
+              <Cookie size={18} weight="fill" />
+            </span>
+            <span className="font-display text-[1.4375rem] font-semibold tracking-tight">
+              Chefcita
+            </span>
           </button>
 
           <nav className="hidden items-center gap-1 md:flex" aria-label="Principal">
@@ -226,8 +230,10 @@ export default function ChefcitaApp() {
                   type="button"
                   aria-current={activo ? 'page' : undefined}
                   onClick={() => irA(item.id)}
-                  className={`flex min-h-[42px] cursor-pointer items-center gap-2 rounded-[10px] px-3.5 text-[0.9375rem] font-semibold transition-colors ${
-                    activo ? 'bg-berry-soft text-berry-dark' : 'text-ink-soft hover:bg-sunken hover:text-ink'
+                  className={`flex min-h-[42px] cursor-pointer items-center gap-2 rounded-[11px] px-3.5 text-[0.9375rem] font-semibold transition-all duration-150 active:scale-[0.97] ${
+                    activo
+                      ? 'bg-berry-soft text-berry-dark ring-1 ring-inset ring-berry/15'
+                      : 'text-ink-soft hover:bg-sunken/80 hover:text-ink'
                   }`}
                 >
                   <Icono size={20} weight={activo ? 'fill' : 'regular'} />
@@ -245,7 +251,16 @@ export default function ChefcitaApp() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pt-6 sm:px-6 sm:pt-10">
-        {cargado && (
+        {!cargado ? (
+          <div className="space-y-6" aria-busy="true" aria-label="Cargando">
+            <div className="h-9 w-56 animate-pulse rounded-xl bg-sunken" />
+            <div className="h-40 animate-pulse rounded-2xl bg-sunken/70" />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="h-32 animate-pulse rounded-2xl bg-sunken/70" />
+              <div className="h-32 animate-pulse rounded-2xl bg-sunken/70" />
+            </div>
+          </div>
+        ) : (
           <>
             {vista === 'inicio' && (
               <InicioView
@@ -258,6 +273,10 @@ export default function ChefcitaApp() {
                 onNuevoProducto={() => setFormReceta({})}
                 onNuevoPedido={() => nuevoPedido()}
                 onVerPedidos={() => irA('pedidos')}
+                onVerEntregados={() => {
+                  irA('pedidos');
+                  setPestanaPedidos('entregados');
+                }}
                 onVerCompras={() => {
                   irA('pedidos');
                   setPestanaPedidos('compras');
@@ -317,7 +336,7 @@ export default function ChefcitaApp() {
 
       {/* Navegación inferior en celular */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line/80 bg-surface/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
         aria-label="Principal"
       >
         {NAVEGACION.map((item) => {
@@ -329,14 +348,18 @@ export default function ChefcitaApp() {
               type="button"
               aria-current={activo ? 'page' : undefined}
               onClick={() => irA(item.id)}
-              className={`relative flex min-h-[60px] cursor-pointer flex-col items-center justify-center gap-0.5 text-xs font-semibold ${
+              className={`relative flex min-h-[62px] cursor-pointer flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-transform duration-150 active:scale-95 ${
                 activo ? 'text-berry' : 'text-ink-soft'
               }`}
             >
-              <span className="relative">
-                <Icono size={24} weight={activo ? 'fill' : 'regular'} />
+              <span
+                className={`relative flex h-7 w-12 items-center justify-center rounded-full transition-colors ${
+                  activo ? 'bg-berry-soft' : ''
+                }`}
+              >
+                <Icono size={22} weight={activo ? 'fill' : 'regular'} />
                 {item.id === 'pedidos' && porEntregar > 0 && (
-                  <span className="num absolute -right-2.5 -top-1 min-w-[18px] rounded-full bg-berry px-1 text-center text-[11px] leading-[18px] text-white">
+                  <span className="num absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-berry px-1 text-center text-[11px] leading-[18px] text-white">
                     {porEntregar}
                   </span>
                 )}
@@ -351,7 +374,7 @@ export default function ChefcitaApp() {
       {aviso && (
         <div
           role="status"
-          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-xl bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_8px_24px_rgba(42,31,27,0.3)] md:bottom-8"
+          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-2xl border border-white/10 bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_12px_32px_rgba(42,31,27,0.32)] md:bottom-8"
         >
           <CheckCircle size={20} weight="fill" className="shrink-0 text-[#7ddba6]" />
           {aviso}

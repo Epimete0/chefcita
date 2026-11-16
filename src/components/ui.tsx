@@ -42,16 +42,22 @@ export function Sheet({
 
   return (
     <div
-      className="anim-fade fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-6"
+      className="anim-fade fixed inset-0 z-50 flex items-end justify-center bg-ink/45 backdrop-blur-[3px] sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={titulo}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         className={`anim-sheet flex w-full ${anchoClase} ${
           alta ? 'h-[96dvh] sm:h-auto sm:max-h-[92dvh]' : 'max-h-[94dvh]'
-        } flex-col rounded-t-2xl bg-surface shadow-[0_-8px_40px_rgba(42,31,27,0.18)] sm:rounded-2xl sm:shadow-[0_24px_60px_rgba(42,31,27,0.25)]`}
+        } flex-col rounded-t-[20px] border border-line/80 bg-surface shadow-[0_-12px_40px_rgba(42,31,27,0.18)] sm:rounded-[20px] sm:shadow-[0_24px_60px_rgba(42,31,27,0.24)]`}
       >
+        <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden="true">
+          <span className="h-1 w-10 rounded-full bg-line-strong" />
+        </div>
         <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
           <div className="min-w-0">
             <h2 className="font-display text-xl font-semibold leading-tight">{titulo}</h2>
@@ -194,7 +200,10 @@ export function Segmentos<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={`flex gap-1 rounded-xl bg-sunken p-1 ${className}`} role="tablist">
+    <div
+      className={`flex gap-1 overflow-x-auto rounded-xl bg-sunken p-1 ring-1 ring-inset ring-line ${className}`}
+      role="tablist"
+    >
       {opciones.map((op) => {
         const activo = op.id === valor;
         return (
@@ -204,9 +213,9 @@ export function Segmentos<T extends string>({
             role="tab"
             aria-selected={activo}
             onClick={() => onChange(op.id)}
-            className={`flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-[9px] px-3 text-sm font-semibold transition-colors ${
+            className={`flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-2.5 text-[0.8125rem] font-semibold transition-all duration-150 active:scale-[0.98] sm:px-3 sm:text-sm ${
               activo
-                ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(42,31,27,0.14)]'
+                ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(38,27,24,0.12)]'
                 : 'text-ink-soft hover:text-ink'
             }`}
           >
@@ -234,11 +243,11 @@ export function Segmentos<T extends string>({
 export type Tono = 'ok' | 'warn' | 'bad' | 'neutro' | 'berry';
 
 const TONOS: Record<Tono, string> = {
-  ok: 'bg-ok-soft text-ok',
-  warn: 'bg-warn-soft text-warn',
-  bad: 'bg-bad-soft text-bad',
-  neutro: 'bg-sunken text-ink-soft',
-  berry: 'bg-berry-soft text-berry-dark',
+  ok: 'bg-ok-soft text-ok ring-1 ring-inset ring-ok/15',
+  warn: 'bg-warn-soft text-warn ring-1 ring-inset ring-warn/15',
+  bad: 'bg-bad-soft text-bad ring-1 ring-inset ring-bad/15',
+  neutro: 'bg-sunken text-ink-soft ring-1 ring-inset ring-line-strong/45',
+  berry: 'bg-berry-soft text-berry-dark ring-1 ring-inset ring-berry/15',
 };
 
 export function Etiqueta({
@@ -273,15 +282,15 @@ export function Vacio({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="card flex flex-col items-center px-6 py-10 text-center">
+    <div className="card anim-rise flex flex-col items-center px-6 py-12 text-center">
       {icono && (
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-berry-soft text-berry">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-berry-soft text-berry ring-1 ring-inset ring-berry/15 shadow-[0_6px_18px_rgba(176,32,63,0.12)]">
           {icono}
         </div>
       )}
-      <h3 className="font-display text-xl font-semibold">{titulo}</h3>
-      <p className="mt-2 max-w-sm text-[0.9375rem] text-ink-soft">{texto}</p>
-      {children && <div className="mt-5 flex flex-wrap justify-center gap-3">{children}</div>}
+      <h3 className="font-display text-2xl font-semibold">{titulo}</h3>
+      <p className="mt-2 max-w-md text-[0.9375rem] text-ink-soft">{texto}</p>
+      {children && <div className="mt-6 flex flex-wrap justify-center gap-3">{children}</div>}
     </div>
   );
 }
@@ -304,7 +313,7 @@ export function EncabezadoVista({
         </h1>
         {ayuda && <p className="mt-1.5 max-w-xl text-[0.9375rem] text-ink-soft">{ayuda}</p>}
       </div>
-      {children && <div className="flex flex-wrap gap-3">{children}</div>}
+      {children && <div className="flex w-full flex-wrap gap-2.5 sm:w-auto sm:gap-3">{children}</div>}
     </div>
   );
 }

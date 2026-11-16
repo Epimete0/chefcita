@@ -66,6 +66,7 @@ export interface Receta {
   notas_chefcita: string;
   color_tag: string;
   favorita: boolean;
+  costo_incompleto?: boolean;
   items: RecetaItem[];
   pasos: RecetaPaso[];
   created_at?: string;
@@ -130,6 +131,7 @@ export interface ResumenCostosReceta {
   multiplicadorSobreCosto: number;
   estadoSalud: EstadoSaludPrecio;
   mensajeDiagnostico: string;
+  costoIncompleto: boolean;
   // Precios sugeridos según objetivo
   precioSugeridoUnidad: number;
   precioSugeridoPack: number;

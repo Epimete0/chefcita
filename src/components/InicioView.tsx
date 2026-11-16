@@ -11,7 +11,7 @@ import {
 import { Etiqueta } from './ui';
 import { TarjetaPedido } from './PedidosView';
 import { TONO_SALUD, TEXTO_SALUD } from './RecipeDetailView';
-import { Plus, Check, CaretRight, ArrowRight } from '@phosphor-icons/react';
+import { Plus, Check, CaretRight, ArrowRight, Wallet, TrendUp } from '@phosphor-icons/react';
 
 const FORMATO_HOY = new Intl.DateTimeFormat('es-CL', {
   weekday: 'long',
@@ -30,6 +30,7 @@ interface InicioViewProps {
   onNuevoProducto: () => void;
   onNuevoPedido: () => void;
   onVerPedidos: () => void;
+  onVerEntregados?: () => void;
   onVerCompras: () => void;
   onAbrirProducto: (id: string) => void;
   onEditarPedido: (pedido: Pedido) => void;
@@ -87,8 +88,9 @@ function PrimerosPasos({
   const hechos = pasos.filter((p) => p.hecho).length;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <h1 className="font-display text-[2rem] font-semibold leading-tight sm:text-[2.5rem]">
+    <div className="anim-rise mx-auto max-w-2xl">
+      <p className="text-sm font-semibold tracking-wide text-berry">Tu cuaderno de pastelería</p>
+      <h1 className="font-display mt-1 text-[2rem] font-semibold leading-[1.12] sm:text-[2.625rem]">
         {hechos === 0 ? 'Bienvenida a Chefcita' : 'Vas muy bien'}
       </h1>
       <p className="mt-3 max-w-xl text-[1.0625rem] text-ink-soft">
@@ -97,18 +99,23 @@ function PrimerosPasos({
           : `Llevas ${hechos} de 3 pasos. Sigue con el que está marcado.`}
       </p>
 
-      <ol className="card mt-8 divide-y divide-line">
+      <ol className="card mt-8 divide-y divide-line overflow-hidden">
         {pasos.map((p, i) => {
           const esActual = i === actual;
           const bloqueado = !p.hecho && !esActual;
           return (
-            <li key={p.titulo} className={`flex gap-4 p-5 ${bloqueado ? 'opacity-55' : ''}`}>
+            <li
+              key={p.titulo}
+              className={`flex gap-4 p-5 transition-colors sm:p-6 ${
+                esActual ? 'bg-berry-soft/35' : ''
+              } ${bloqueado ? 'opacity-55' : ''}`}
+            >
               <span
                 className={`num flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[0.9375rem] font-bold ${
                   p.hecho
                     ? 'bg-ok text-white'
                     : esActual
-                      ? 'bg-berry text-white'
+                      ? 'bg-berry text-white shadow-[0_4px_12px_rgba(176,32,63,0.28)]'
                       : 'bg-sunken text-ink-soft'
                 }`}
               >
@@ -159,6 +166,7 @@ export default function InicioView(props: InicioViewProps) {
     onNuevoProducto,
     onNuevoPedido,
     onVerPedidos,
+    onVerEntregados,
     onVerCompras,
     onAbrirProducto,
     onEditarPedido,
@@ -189,7 +197,7 @@ export default function InicioView(props: InicioViewProps) {
 
   const porRevisar = recetas.filter((r) => {
     const res = resumenes.get(r.id);
-    return res && (res.costoTotalLote <= 0 || res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo');
+    return res && (res.costoIncompleto || res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo');
   });
 
   // Mientras no exista un producto y un pedido, la pantalla es la guía de primeros pasos
@@ -200,10 +208,10 @@ export default function InicioView(props: InicioViewProps) {
   const hoy = FORMATO_HOY.format(new Date());
 
   return (
-    <div className="space-y-8">
+    <div className="anim-rise space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div>
-          <h1 className="font-display text-[1.75rem] font-semibold leading-tight first-letter:uppercase sm:text-[2rem]">
+          <h1 className="font-display text-[1.875rem] font-semibold leading-tight first-letter:uppercase sm:text-[2.25rem]">
             {hoy}
           </h1>
           <p className="mt-1.5 text-[0.9375rem] text-ink-soft">
@@ -226,15 +234,51 @@ export default function InicioView(props: InicioViewProps) {
         </div>
       </div>
 
-      <dl className="card grid grid-cols-2 divide-x divide-line">
-        <div className="p-4 sm:p-5">
-          <dt className="text-sm text-ink-soft">Te falta cobrar</dt>
-          <dd className="num mt-0.5 text-2xl font-bold">{formatearMoneda(porCobrar)}</dd>
-        </div>
-        <div className="p-4 sm:p-5">
-          <dt className="text-sm text-ink-soft">Ganancia de {FORMATO_MES.format(new Date())}</dt>
-          <dd className="num mt-0.5 text-2xl font-bold text-ok">{formatearMoneda(gananciaMes)}</dd>
-        </div>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+        <button
+          type="button"
+          onClick={onVerPedidos}
+          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+        >
+          <div>
+            <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-caramel-soft text-caramel">
+                <Wallet size={16} weight="duotone" />
+              </span>
+              Te falta cobrar
+            </dt>
+            <dd className="num font-display mt-2 text-2xl font-semibold sm:text-[1.875rem]">
+              {formatearMoneda(porCobrar)}
+            </dd>
+          </div>
+          <CaretRight
+            size={18}
+            weight="bold"
+            className="shrink-0 text-ink-soft transition-transform duration-150 group-hover:translate-x-0.5"
+          />
+        </button>
+        <button
+          type="button"
+          onClick={onVerEntregados || onVerPedidos}
+          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+        >
+          <div>
+            <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ok-soft text-ok">
+                <TrendUp size={16} weight="duotone" />
+              </span>
+              Ganancia de {FORMATO_MES.format(new Date())}
+            </dt>
+            <dd className="num font-display mt-2 text-2xl font-semibold text-ok sm:text-[1.875rem]">
+              {formatearMoneda(gananciaMes)}
+            </dd>
+          </div>
+          <CaretRight
+            size={18}
+            weight="bold"
+            className="shrink-0 text-ink-soft transition-transform duration-150 group-hover:translate-x-0.5"
+          />
+        </button>
       </dl>
 
       <section>
@@ -305,7 +349,7 @@ export default function InicioView(props: InicioViewProps) {
               <ul className="card mt-3 divide-y divide-line overflow-hidden">
                 {porRevisar.map((r) => {
                   const res = resumenes.get(r.id)!;
-                  const sinCosto = res.costoTotalLote <= 0;
+                  const incompleto = res.costoIncompleto;
                   return (
                     <li key={r.id}>
                       <button
@@ -314,8 +358,12 @@ export default function InicioView(props: InicioViewProps) {
                         className="flex min-h-[52px] w-full cursor-pointer items-center gap-3 px-4 py-3 text-left hover:bg-paper sm:px-5"
                       >
                         <span className="min-w-0 flex-1 truncate">{r.nombre}</span>
-                        <Etiqueta tono={sinCosto ? 'warn' : TONO_SALUD[res.estadoSalud]}>
-                          {sinCosto ? 'Faltan ingredientes' : TEXTO_SALUD[res.estadoSalud]}
+                        <Etiqueta tono={incompleto ? 'warn' : TONO_SALUD[res.estadoSalud]}>
+                          {incompleto
+                            ? res.costoTotalLote > 0
+                              ? 'Costo incompleto'
+                              : 'Faltan datos'
+                            : TEXTO_SALUD[res.estadoSalud]}
                         </Etiqueta>
                         <CaretRight size={14} weight="bold" className="shrink-0 text-ink-soft" />
                       </button>

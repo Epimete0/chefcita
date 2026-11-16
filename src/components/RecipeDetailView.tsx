@@ -139,8 +139,8 @@ export default function RecipeDetailView({
     [receta, insumosMap, veces]
   );
 
-  const sinCosto = r.costoTotalLote <= 0;
-  const tono: Tono = sinCosto ? 'neutro' : TONO_SALUD[r.estadoSalud];
+  const incompleto = r.costoIncompleto;
+  const tono: Tono = incompleto ? 'warn' : TONO_SALUD[r.estadoSalud];
   const precioCambiado = precioNum !== (receta.precio_venta_pack || 0) && precioNum > 0;
 
   const sugerencias = [
@@ -209,7 +209,7 @@ export default function RecipeDetailView({
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="anim-rise space-y-6">
       <div>
         <button
           type="button"
@@ -256,39 +256,71 @@ export default function RecipeDetailView({
       {pestana === 'precio' && (
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="min-w-0 space-y-6 lg:col-span-3">
-            {sinCosto ? (
-              <div className="card p-5">
-                <h2 className="text-lg font-bold">Falta saber cuánto te cuesta</h2>
+            {incompleto ? (
+              <div className="card p-5 sm:p-6">
+                <Etiqueta tono="warn">
+                  {r.costoTotalLote > 0 ? 'Costo incompleto · falta dato' : 'Faltan ingredientes y costos'}
+                </Etiqueta>
+                <h2 className="mt-3 text-lg font-bold">Aún no calculamos la ganancia real</h2>
                 <p className="mt-1 text-[0.9375rem] text-ink-soft">
-                  Este producto todavía no tiene ingredientes con cantidad, así que no podemos decirte
-                  cuánto ganas. Agrégalos y el cálculo aparece solo.
+                  Este producto tiene ingredientes, cantidades o precios pendientes por confirmar.
+                  Complétalos para ver el margen real y sugerencias de precio sin cifras falsas.
                 </p>
+                {(r.costoTotalLote > 0 || r.precioVentaPack > 0) && (
+                  <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-line pt-4 sm:grid-cols-2">
+                    {r.costoTotalLote > 0 && (
+                      <div>
+                        <dt className="text-sm text-ink-soft">Costo parcial registrado</dt>
+                        <dd className="num font-display mt-0.5 text-xl font-semibold">
+                          {formatearMoneda(r.costoPorPack)}
+                        </dd>
+                        <div className="text-xs text-ink-soft">
+                          Por {nombreVenta} ({formatearMoneda(r.costoTotalLote)} lote)
+                        </div>
+                      </div>
+                    )}
+                    {r.precioVentaPack > 0 && (
+                      <div>
+                        <dt className="text-sm text-ink-soft">Precio de venta anotado</dt>
+                        <dd className="num font-display mt-0.5 text-xl font-semibold">
+                          {formatearMoneda(r.precioVentaPack)}
+                        </dd>
+                        <div className="text-xs text-ink-soft">Por {nombreVenta}</div>
+                      </div>
+                    )}
+                  </dl>
+                )}
+                {receta.notas_chefcita && (
+                  <p className="mt-4 rounded-xl bg-sunken px-4 py-3 text-[0.9375rem] leading-relaxed">
+                    <strong>Registro y datos pendientes:</strong> {receta.notas_chefcita}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="btn btn-primary mt-4"
                   onClick={() => onEditarReceta(receta)}
                 >
-                  Agregar ingredientes
+                  Completar producto
                 </button>
               </div>
             ) : (
-              <div className="card p-5">
-                <dl className="grid grid-cols-3 gap-3">
+              <div className="card overflow-hidden p-5 sm:p-6">
+                <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-3">
                   <div>
                     <dt className="text-sm text-ink-soft">Te cuesta</dt>
-                    <dd className="num mt-0.5 text-xl font-bold sm:text-2xl">
+                    <dd className="num font-display mt-0.5 text-xl font-semibold sm:text-2xl">
                       {formatearMoneda(r.costoPorPack)}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-sm text-ink-soft">Lo vendes a</dt>
-                    <dd className="num mt-0.5 text-xl font-bold sm:text-2xl">
+                    <dd className="num font-display mt-0.5 text-xl font-semibold sm:text-2xl">
                       {formatearMoneda(r.precioVentaPack)}
                     </dd>
                   </div>
-                  <div>
+                  <div className="col-span-2 border-t border-line pt-3 sm:col-span-1 sm:border-t-0 sm:pt-0">
                     <dt className="text-sm text-ink-soft">{r.gananciaPorPack < 0 ? 'Pierdes' : 'Ganas'}</dt>
-                    <dd className={`num mt-0.5 text-xl font-bold sm:text-2xl ${COLOR_TEXTO[tono]}`}>
+                    <dd className={`num font-display mt-0.5 text-2xl font-semibold ${COLOR_TEXTO[tono]}`}>
                       {formatearMoneda(Math.abs(r.gananciaPorPack))}
                     </dd>
                   </div>
@@ -348,7 +380,7 @@ export default function RecipeDetailView({
                   </button>
                 )}
               </div>
-              {!sinCosto && (
+              {!incompleto && (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {sugerencias.map((s) => (
                     <button
@@ -367,7 +399,7 @@ export default function RecipeDetailView({
               )}
             </div>
 
-            {!sinCosto && (
+            {!incompleto && (
               <div className="card overflow-x-auto">
                 <table className="num w-full text-left text-[0.9375rem]">
                   <thead>
@@ -397,12 +429,16 @@ export default function RecipeDetailView({
 
           <div className="min-w-0 lg:col-span-2">
             <div className="card p-5">
-              <h2 className="text-lg font-bold">En qué se va el costo</h2>
+              <h2 className="text-lg font-bold">
+                {incompleto && r.costoTotalLote > 0
+                  ? 'Costos parciales registrados'
+                  : 'En qué se va el costo'}
+              </h2>
               <p className="mt-0.5 text-sm text-ink-soft">
                 Para {receta.rendimiento_cantidad} {receta.rendimiento_unidad}.
               </p>
 
-              {grupos.length === 0 ? (
+              {grupos.length === 0 && r.costoManoObra <= 0 ? (
                 <p className="mt-4 text-[0.9375rem] text-ink-soft">Aún no hay ingredientes.</p>
               ) : (
                 <div className="mt-4 space-y-5">
@@ -413,21 +449,34 @@ export default function RecipeDetailView({
                         <span className="num">{formatearMoneda(g.total)}</span>
                       </div>
                       <ul className="mt-1.5 divide-y divide-line">
-                        {g.lista.map((d) => (
-                          <li key={d.item.id} className="flex items-baseline justify-between gap-3 py-2">
-                            <div className="min-w-0">
-                              <span className={d.insumo ? '' : 'text-bad'}>
-                                {d.insumo?.nombre || 'Ingrediente eliminado'}
-                              </span>
-                              <span className="num ml-2 text-sm text-ink-soft">
-                                {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
-                              </span>
-                            </div>
-                            <span className="num shrink-0 font-semibold">
-                              {formatearMoneda(d.costoItem)}
-                            </span>
-                          </li>
-                        ))}
+                        {g.lista.map((d) => {
+                          const sinPrecioItem =
+                            !d.insumo || (Number(d.insumo.precio_compra) || 0) <= 0;
+                          return (
+                            <li
+                              key={d.item.id}
+                              className="flex items-baseline justify-between gap-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <span className={d.insumo ? '' : 'text-bad'}>
+                                  {d.insumo?.nombre || 'Ingrediente eliminado'}
+                                </span>
+                                <span className="num ml-2 text-sm text-ink-soft">
+                                  {formatearCantidad(d.cantidadEscalada, d.item.unidad)}
+                                </span>
+                              </div>
+                              {sinPrecioItem ? (
+                                <span className="shrink-0 text-sm font-semibold text-warn">
+                                  Falta precio
+                                </span>
+                              ) : (
+                                <span className="num shrink-0 font-semibold">
+                                  {formatearMoneda(d.costoItem)}
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                     </div>
                   ))}
@@ -442,8 +491,14 @@ export default function RecipeDetailView({
                       <span className="num font-semibold">{formatearMoneda(r.costoGastosExtras)}</span>
                     </div>
                   )}
+                  {r.costoManoObra > 0 && (
+                    <div className="flex items-baseline justify-between text-[0.9375rem]">
+                      <span>Mano de obra</span>
+                      <span className="num font-semibold">{formatearMoneda(r.costoManoObra)}</span>
+                    </div>
+                  )}
                   <div className="flex items-baseline justify-between border-t border-line-strong pt-3 text-base font-bold">
-                    <span>Costo total</span>
+                    <span>{incompleto ? 'Costo parcial (incompleto)' : 'Costo total'}</span>
                     <span className="num">{formatearMoneda(r.costoTotalLote)}</span>
                   </div>
                 </div>
@@ -589,7 +644,15 @@ export default function RecipeDetailView({
             </div>
 
             <div className="card min-w-0 p-5 lg:col-span-3">
-              <h2 className="text-lg font-bold">Paso a paso</h2>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-bold">Paso a paso</h2>
+                {receta.pasos.length > 0 && (
+                  <span className="num text-sm font-medium text-ink-soft">
+                    {receta.pasos.filter((p) => pasosHechos[p.id]).length} de {receta.pasos.length}{' '}
+                    listos
+                  </span>
+                )}
+              </div>
               {receta.pasos.length === 0 ? (
                 <div className="mt-3">
                   <p className="text-[0.9375rem] text-ink-soft">

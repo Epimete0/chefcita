@@ -164,10 +164,14 @@ function EditorItems({
                     {ins?.nombre || 'Ya no existe'}
                   </span>
                   <span className="num shrink-0 text-sm font-semibold">
-                    {Number(it.cantidad) > 0 ? formatearMoneda(costo) : '—'}
+                    {Number(it.cantidad) > 0
+                      ? ins && (Number(ins.precio_compra) || 0) > 0
+                        ? formatearMoneda(costo)
+                        : 'Falta precio'
+                      : '—'}
                   </span>
                 </div>
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <input
                     type="number"
                     inputMode="decimal"
@@ -178,7 +182,7 @@ function EditorItems({
                     aria-label={`Cantidad de ${ins?.nombre || 'ingrediente'}`}
                     value={it.cantidad}
                     onChange={(e) => onCambiar(it.tempId, { cantidad: e.target.value })}
-                    className="input num w-28 font-semibold"
+                    className="input num w-24 font-semibold sm:w-28"
                   />
                   {unidades.length > 1 ? (
                     <select
@@ -285,6 +289,7 @@ function EditorItems({
               {disponibles.map((ins) => (
                 <option key={ins.id} value={ins.id}>
                   {ins.nombre}
+                  {Number(ins.precio_compra) <= 0 ? ' (falta precio)' : ''}
                 </option>
               ))}
             </select>
@@ -349,6 +354,14 @@ export default function RecipeFormModal({
     }))
   );
   const [extras, setExtras] = useState(String(recetaInicial?.porcentaje_gastos_extras ?? 10));
+  const [costoManoObra, setCostoManoObra] = useState(
+    recetaInicial && recetaInicial.costo_mano_obra_lote > 0
+      ? String(recetaInicial.costo_mano_obra_lote)
+      : ''
+  );
+  const [marcadoIncompleto, setMarcadoIncompleto] = useState(
+    Boolean(recetaInicial?.costo_incompleto)
+  );
 
   // Paso 4: precio
   const [precio, setPrecio] = useState(
@@ -386,16 +399,33 @@ export default function RecipeFormModal({
   const costos = useMemo(() => {
     let ingredientes = 0;
     let envase = 0;
+    let tieneSinPrecio = false;
     for (const it of items) {
-      const costo = costoDeItem(it, insumosMap.get(it.insumo_id));
+      const ins = insumosMap.get(it.insumo_id);
+      if (Number(it.cantidad) > 0 && (!ins || (Number(ins.precio_compra) || 0) <= 0)) {
+        tieneSinPrecio = true;
+      }
+      const costo = costoDeItem(it, ins);
       if (it.seccion === 'empaque') envase += costo;
       else ingredientes += costo;
     }
     const otros = ingredientes * ((Number(extras) || 0) / 100);
-    const total = ingredientes + envase + otros + (recetaInicial?.costo_mano_obra_lote || 0);
+    const manoObra = Number(costoManoObra) || 0;
+    const total = ingredientes + envase + otros + manoObra;
     const porUnidad = total / rend;
-    return { ingredientes, envase, otros, total, porUnidad, porVenta: porUnidad * unidPack };
-  }, [items, insumosMap, extras, rend, unidPack, recetaInicial]);
+    return {
+      ingredientes,
+      envase,
+      otros,
+      manoObra,
+      total,
+      porUnidad,
+      porVenta: porUnidad * unidPack,
+      tieneSinPrecio,
+    };
+  }, [items, insumosMap, extras, costoManoObra, rend, unidPack]);
+
+  const esCostoIncompleto = marcadoIncompleto || costos.total <= 0 || costos.tieneSinPrecio;
 
   const sugerencias = [
     { id: 'ajustado', nombre: 'Ajustado', margen: 45 },
@@ -451,7 +481,11 @@ export default function RecipeFormModal({
     setGuardando(true);
     try {
       const precioVenta =
-        precioNum > 0 ? precioNum : costos.porVenta > 0 ? precioParaMargen(costos.porVenta, 60) : 0;
+        precioNum > 0
+          ? precioNum
+          : !esCostoIncompleto && costos.porVenta > 0
+            ? precioParaMargen(costos.porVenta, 60)
+            : 0;
       await onSave(
         {
           id: recetaInicial?.id,
@@ -463,19 +497,24 @@ export default function RecipeFormModal({
           unidades_por_pack: unidPack,
           nombre_pack: nombreVenta,
           porcentaje_gastos_extras: Number(extras) || 0,
-          costo_mano_obra_lote: recetaInicial?.costo_mano_obra_lote || 0,
+          costo_mano_obra_lote: Number(costoManoObra) || 0,
           margen_objetivo_porcentaje: recetaInicial?.margen_objetivo_porcentaje || 60,
           precio_venta_unidad:
-            modoVenta === 'pack' ? redondearPrecioComercial(precioVenta / unidPack) : precioVenta,
+            modoVenta === 'pack'
+              ? precioVenta > 0
+                ? redondearPrecioComercial(precioVenta / unidPack)
+                : 0
+              : precioVenta,
           precio_venta_pack: precioVenta,
           precio_venta_lote: Math.round(precioVenta * (rend / unidPack)),
           tiempo_preparacion_min: recetaInicial?.tiempo_preparacion_min || 30,
-          tiempo_horneado_min: recetaInicial?.tiempo_horneado_min || 20,
+          tiempo_horneado_min: recetaInicial?.tiempo_horneado_min ?? 20,
           temperatura_horno_c: recetaInicial?.temperatura_horno_c ?? 180,
           metodo_coccion: recetaInicial?.metodo_coccion || 'Horno',
           notas_chefcita: notas,
           color_tag: recetaInicial?.color_tag || 'rose',
           favorita: recetaInicial?.favorita ?? true,
+          costo_incompleto: marcadoIncompleto || costos.tieneSinPrecio,
         },
         items
           .filter((it) => Number(it.cantidad) > 0 && insumosMap.has(it.insumo_id))
@@ -545,7 +584,9 @@ export default function RecipeFormModal({
         <div>
           {costos.total > 0 && paso !== 3 && (
             <div className="mb-3 flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-ink-soft">Costo hasta ahora</span>
+              <span className="text-ink-soft">
+                {esCostoIncompleto ? 'Costo parcial hasta ahora' : 'Costo hasta ahora'}
+              </span>
               <span className="num text-right font-semibold">
                 {formatearMoneda(costos.total)}
                 <span className="font-normal text-ink-soft">
@@ -780,6 +821,29 @@ export default function RecipeFormModal({
               )}
             </div>
           </Campo>
+
+          <Campo
+            etiqueta="Mano de obra por lote (opcional)"
+            ayuda="Si quieres incluir tu tiempo (ej: $4.000 por hora), anótalo aquí."
+          >
+            <CampoDinero value={costoManoObra} onChange={setCostoManoObra} placeholder="0" />
+          </Campo>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-paper p-3.5">
+            <input
+              type="checkbox"
+              checked={marcadoIncompleto}
+              onChange={(e) => setMarcadoIncompleto(e.target.checked)}
+              className="mt-1 h-4 w-4 accent-[var(--color-berry)]"
+            />
+            <span className="text-[0.9375rem]">
+              <strong className="block font-semibold">Aún faltan datos de costo</strong>
+              <span className="text-sm text-ink-soft">
+                Marca esta casilla si todavía te faltan ingredientes, gramos o precios por confirmar
+                para no calcular una ganancia irreal.
+              </span>
+            </span>
+          </label>
         </div>
       )}
 
@@ -790,8 +854,9 @@ export default function RecipeFormModal({
             <>
               <div className="rounded-xl bg-sunken p-4">
                 <div className="text-sm text-ink-soft">
-                  Hacer {modoVenta === 'pack' ? `una ${nombreVenta}` : `cada ${unidadSingular}`} te
-                  cuesta
+                  {esCostoIncompleto ? 'Costo parcial registrado por ' : 'Hacer '}
+                  {modoVenta === 'pack' ? `una ${nombreVenta}` : `cada ${unidadSingular}`}
+                  {esCostoIncompleto ? '' : ' te cuesta'}
                 </div>
                 <div className="num font-display text-3xl font-semibold">
                   {formatearMoneda(costos.porVenta)}
@@ -809,9 +874,15 @@ export default function RecipeFormModal({
                     <dt>Gas, luz y otros</dt>
                     <dd>{formatearMoneda(costos.otros)}</dd>
                   </div>
+                  {costos.manoObra > 0 && (
+                    <div className="flex justify-between">
+                      <dt>Mano de obra</dt>
+                      <dd>{formatearMoneda(costos.manoObra)}</dd>
+                    </div>
+                  )}
                   <div className="flex justify-between font-semibold text-ink">
                     <dt>
-                      Total por {rend} {rendUnidad}
+                      {esCostoIncompleto ? 'Costo parcial' : 'Total'} por {rend} {rendUnidad}
                     </dt>
                     <dd>{formatearMoneda(costos.total)}</dd>
                   </div>
@@ -825,40 +896,59 @@ export default function RecipeFormModal({
                 </p>
               )}
 
-              <fieldset>
-                <legend className="label">Elige un precio o escribe el tuyo</legend>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {sugerencias.map((s) => {
-                    const activo = precioNum === s.precio;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        aria-pressed={activo}
-                        onClick={() => setPrecio(String(s.precio))}
-                        className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors sm:block ${
-                          activo
-                            ? 'border-berry bg-berry-soft'
-                            : 'border-line-strong bg-surface hover:bg-paper'
-                        }`}
-                      >
-                        <div>
-                          <div className="text-sm font-semibold text-ink-soft">{s.nombre}</div>
-                          <div className="num text-lg font-bold">{formatearMoneda(s.precio)}</div>
-                        </div>
-                        <div className="num text-sm font-semibold text-ok">
-                          ganas {formatearMoneda(s.precio - costos.porVenta)}
-                        </div>
-                      </button>
-                    );
-                  })}
+              {esCostoIncompleto ? (
+                <div className="space-y-3 rounded-xl bg-warn-soft px-4 py-3 text-[0.9375rem] font-medium text-warn">
+                  <p>
+                    {costos.tieneSinPrecio
+                      ? 'Hay ingredientes usados en esta receta que aún no tienen precio, por eso no calculamos ganancia ni precios sugeridos.'
+                      : 'Este producto está marcado como incompleto, por eso aún no calculamos ganancia ni precios sugeridos.'}
+                  </p>
+                  {marcadoIncompleto && !costos.tieneSinPrecio && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => setMarcadoIncompleto(false)}
+                    >
+                      Ya agregué todo, calcular ganancia real
+                    </button>
+                  )}
                 </div>
-              </fieldset>
+              ) : (
+                <fieldset>
+                  <legend className="label">Elige un precio o escribe el tuyo</legend>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {sugerencias.map((s) => {
+                      const activo = precioNum === s.precio;
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          aria-pressed={activo}
+                          onClick={() => setPrecio(String(s.precio))}
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-colors sm:block ${
+                            activo
+                              ? 'border-berry bg-berry-soft'
+                              : 'border-line-strong bg-surface hover:bg-paper'
+                          }`}
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-ink-soft">{s.nombre}</div>
+                            <div className="num text-lg font-bold">{formatearMoneda(s.precio)}</div>
+                          </div>
+                          <div className="num text-sm font-semibold text-ok">
+                            ganas {formatearMoneda(s.precio - costos.porVenta)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
             </>
           ) : (
             <p className="rounded-xl bg-warn-soft px-4 py-3 text-[0.9375rem] font-medium text-warn">
-              Todavía no agregas ingredientes con cantidad, así que no podemos calcular el costo.
-              Puedes anotar el precio que ya cobras y completar los ingredientes después.
+              Todavía no agregas ingredientes con cantidad y precio, así que no podemos calcular el
+              costo. Puedes anotar el precio que ya cobras y completarlo después.
             </p>
           )}
 
@@ -866,7 +956,7 @@ export default function RecipeFormModal({
             <CampoDinero value={precio} onChange={setPrecio} placeholder="0" className="text-lg" />
           </Campo>
 
-          {precioNum > 0 && costos.total > 0 && (
+          {!esCostoIncompleto && precioNum > 0 && costos.total > 0 && (
             <p
               className={`rounded-xl px-4 py-3 text-[0.9375rem] font-medium ${
                 ganancia <= 0

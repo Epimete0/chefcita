@@ -53,7 +53,9 @@ export function obtenerCostoUnitarioInsumo(insumo: Insumo): {
   const costoPorUnidadBase = cantidadBase > 0 ? precio / cantidadBase : 0;
 
   let etiquetaCostoLegible = '';
-  if (unidadBase === 'g') {
+  if (precio <= 0) {
+    etiquetaCostoLegible = 'Falta precio';
+  } else if (unidadBase === 'g') {
     etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase * 100)} cada 100 g`;
   } else if (unidadBase === 'ml') {
     etiquetaCostoLegible = `${formatearMoneda(costoPorUnidadBase * 100)} cada 100 ml`;
@@ -135,9 +137,13 @@ export function calcularCostosReceta(
   const itemsMasa: DesgloseItemCosto[] = [];
   const itemsRelleno: DesgloseItemCosto[] = [];
   const itemsEmpaque: DesgloseItemCosto[] = [];
+  let tieneInsumoSinPrecio = false;
 
   for (const item of receta.items || []) {
     const insumo = insumosMap.get(item.insumo_id) || item.insumo;
+    if (!insumo || (Number(insumo.precio_compra) || 0) <= 0) {
+      tieneInsumoSinPrecio = true;
+    }
     const cantidadEscalada = (Number(item.cantidad) || 0) * escala;
     const costoItem = calcularCostoItemReceta(item, insumo, escala);
 
@@ -168,6 +174,8 @@ export function calcularCostosReceta(
 
   const costoTotalLote =
     costoMasa + costoRellenoCobertura + costoEmpaque + costoGastosExtras + costoManoObra;
+  const costoIncompleto =
+    Boolean(receta.costo_incompleto) || costoTotalLote <= 0 || tieneInsumoSinPrecio;
 
   const todosItems = [...itemsMasa, ...itemsRelleno, ...itemsEmpaque];
   for (const d of todosItems) {
@@ -185,32 +193,49 @@ export function calcularCostosReceta(
   const margenObjetivo = Math.min(Math.max(Number(receta.margen_objetivo_porcentaje) || 55, 10), 90);
   const divisorMargen = 1 - margenObjetivo / 100;
 
-  const precioSugeridoUnidad = redondearPrecioComercial(costoPorUnidad / divisorMargen);
-  const precioSugeridoPack = redondearPrecioComercial(costoPorPack / divisorMargen);
-  const precioSugeridoLote = redondearPrecioComercial(costoTotalLote / divisorMargen);
+  const precioSugeridoUnidad = costoIncompleto
+    ? 0
+    : redondearPrecioComercial(costoPorUnidad / divisorMargen);
+  const precioSugeridoPack = costoIncompleto
+    ? 0
+    : redondearPrecioComercial(costoPorPack / divisorMargen);
+  const precioSugeridoLote = costoIncompleto
+    ? 0
+    : redondearPrecioComercial(costoTotalLote / divisorMargen);
 
-  // Precios de venta configurados por la pastelera
-  const precioVentaPack = Number(receta.precio_venta_pack) || precioSugeridoPack;
+  // Precios de venta configurados por la pastelera (sin inventar precio si el costo está incompleto)
+  const precioVentaPack =
+    Number(receta.precio_venta_pack) || (costoIncompleto ? 0 : precioSugeridoPack);
   const precioVentaUnidad =
     Number(receta.precio_venta_unidad) ||
-    (unidadesPorPack > 0 ? Math.round(precioVentaPack / unidadesPorPack) : precioSugeridoUnidad);
+    (unidadesPorPack > 0 && precioVentaPack > 0
+      ? Math.round(precioVentaPack / unidadesPorPack)
+      : precioSugeridoUnidad);
   const precioVentaLote =
-    (Number(receta.precio_venta_lote) || precioVentaPack * (rendimientoBase / unidadesPorPack)) *
+    (Number(receta.precio_venta_lote) ||
+      (precioVentaPack > 0 ? precioVentaPack * (rendimientoBase / unidadesPorPack) : 0)) *
     escala;
 
-  const gananciaPorUnidad = precioVentaUnidad - costoPorUnidad;
-  const gananciaPorPack = precioVentaPack - costoPorPack;
-  const gananciaPorLote = precioVentaLote - costoTotalLote;
+  const gananciaPorUnidad = costoIncompleto ? 0 : precioVentaUnidad - costoPorUnidad;
+  const gananciaPorPack = costoIncompleto ? 0 : precioVentaPack - costoPorPack;
+  const gananciaPorLote = costoIncompleto ? 0 : precioVentaLote - costoTotalLote;
 
   const margenRealPorcentaje =
-    precioVentaLote > 0 ? ((precioVentaLote - costoTotalLote) / precioVentaLote) * 100 : 0;
-  const multiplicadorSobreCosto = costoTotalLote > 0 ? precioVentaLote / costoTotalLote : 0;
+    !costoIncompleto && precioVentaLote > 0
+      ? ((precioVentaLote - costoTotalLote) / precioVentaLote) * 100
+      : 0;
+  const multiplicadorSobreCosto =
+    !costoIncompleto && costoTotalLote > 0 ? precioVentaLote / costoTotalLote : 0;
 
   let estadoSalud: EstadoSaludPrecio = 'correcto';
   let mensajeDiagnostico = '';
   const pack = (receta.nombre_pack || 'unidad').toLowerCase();
 
-  if (gananciaPorLote <= 0) {
+  if (costoIncompleto) {
+    estadoSalud = 'bajo';
+    mensajeDiagnostico =
+      'Costo incompleto: falta completar ingredientes o precios antes de calcular la ganancia real.';
+  } else if (gananciaPorLote <= 0) {
     estadoSalud = 'perdida';
     mensajeDiagnostico = `Con este precio pierdes dinero: hacer cada ${pack} te cuesta ${formatearMoneda(costoPorPack)}. Súbelo al menos a ${formatearMoneda(precioSugeridoPack)}.`;
   } else if (margenRealPorcentaje < 38) {
@@ -250,6 +275,7 @@ export function calcularCostosReceta(
     multiplicadorSobreCosto,
     estadoSalud,
     mensajeDiagnostico,
+    costoIncompleto,
     precioSugeridoUnidad,
     precioSugeridoPack,
     precioSugeridoLote,

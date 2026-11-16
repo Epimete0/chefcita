@@ -63,57 +63,78 @@ export function TarjetaPedido({
   const faltaCobrar = Math.max(0, pedido.precio_venta_total - pedido.seña_pagada);
   const siguiente = SIGUIENTE[pedido.estado];
 
+  const acentoUrgencia =
+    !entregado && fecha.tono === 'atrasado'
+      ? 'border-l-4 border-l-bad'
+      : !entregado && fecha.tono === 'hoy'
+        ? 'border-l-4 border-l-berry'
+        : '';
+
   return (
-    <article className="card p-4 sm:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        {!entregado && <Etiqueta tono={TONO_FECHA[fecha.tono]}>{fecha.texto}</Etiqueta>}
-        <Etiqueta tono={ESTADO[pedido.estado].tono}>{ESTADO[pedido.estado].texto}</Etiqueta>
-        <button
-          type="button"
-          onClick={() => onEditar(pedido)}
-          aria-label={`Editar pedido de ${pedido.cliente_nombre}`}
-          className="-my-1 -mr-2 ml-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft hover:bg-sunken hover:text-ink"
-        >
-          <PencilSimple size={18} />
-        </button>
+    <article className={`card card-interactive flex flex-col justify-between p-4 sm:p-5 ${acentoUrgencia}`}>
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!entregado && <Etiqueta tono={TONO_FECHA[fecha.tono]}>{fecha.texto}</Etiqueta>}
+          <Etiqueta tono={ESTADO[pedido.estado].tono}>{ESTADO[pedido.estado].texto}</Etiqueta>
+          <button
+            type="button"
+            onClick={() => onEditar(pedido)}
+            aria-label={`Editar pedido de ${pedido.cliente_nombre}`}
+            className="-my-1 -mr-2 ml-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft hover:bg-sunken hover:text-ink"
+          >
+            <PencilSimple size={18} />
+          </button>
+        </div>
+
+        <h3 className="mt-2 text-[1.0625rem] font-bold leading-snug">{pedido.cliente_nombre}</h3>
+        <p className="text-[0.9375rem] text-ink-soft">
+          <span className="num">{pedido.unidades_totales}</span> × {pedido.receta_nombre_snapshot}
+          {entregado && ` · ${fecha.texto.replace('Atrasado · ', '')}`}
+        </p>
+        {pedido.notas && <p className="mt-1 text-sm text-ink-soft">“{pedido.notas}”</p>}
       </div>
 
-      <h3 className="mt-2 text-[1.0625rem] font-bold leading-snug">{pedido.cliente_nombre}</h3>
-      <p className="text-[0.9375rem] text-ink-soft">
-        <span className="num">{pedido.unidades_totales}</span> × {pedido.receta_nombre_snapshot}
-        {entregado && ` · ${fecha.texto.replace('Atrasado · ', '')}`}
-      </p>
-      {pedido.notas && <p className="mt-1 text-sm text-ink-soft">“{pedido.notas}”</p>}
-
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-3 border-t border-line pt-3">
-        <div className="num text-sm text-ink-soft">
-          Total {formatearMoneda(pedido.precio_venta_total)}
-          {pedido.seña_pagada > 0 && !entregado && ` · abonó ${formatearMoneda(pedido.seña_pagada)}`}
-          <div className="text-[0.9375rem] font-bold text-ink">
-            {entregado
-              ? `Ganaste ${formatearMoneda(pedido.ganancia_neta)}`
-              : faltaCobrar > 0
-                ? `Falta cobrar ${formatearMoneda(faltaCobrar)}`
-                : 'Ya está pagado'}
+      <div className="mt-4 border-t border-line pt-3">
+        {!entregado && pedido.seña_pagada > 0 && faltaCobrar > 0 && pedido.precio_venta_total > 0 && (
+          <div className="mb-2.5 h-1.5 w-full overflow-hidden rounded-full bg-sunken">
+            <div
+              className="h-full rounded-full bg-ok transition-[width] duration-300"
+              style={{
+                width: `${Math.min(100, Math.round((pedido.seña_pagada / pedido.precio_venta_total) * 100))}%`,
+              }}
+            />
           </div>
-        </div>
-        {siguiente ? (
-          <button
-            type="button"
-            className={`btn btn-sm ${siguiente.estado === 'entregado' ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => onCambiarEstado(pedido, siguiente.estado)}
-          >
-            {siguiente.accion}
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            onClick={() => onCambiarEstado(pedido, 'listo')}
-          >
-            Deshacer entrega
-          </button>
         )}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="num text-sm text-ink-soft">
+            Total {formatearMoneda(pedido.precio_venta_total)}
+            {pedido.seña_pagada > 0 && !entregado && ` · abonó ${formatearMoneda(pedido.seña_pagada)}`}
+            <div className="text-[0.9375rem] font-bold text-ink">
+              {entregado
+                ? `Ganaste ${formatearMoneda(pedido.ganancia_neta)}`
+                : faltaCobrar > 0
+                  ? `Falta cobrar ${formatearMoneda(faltaCobrar)}`
+                  : 'Ya está pagado'}
+            </div>
+          </div>
+          {siguiente ? (
+            <button
+              type="button"
+              className={`btn btn-sm ${siguiente.estado === 'entregado' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => onCambiarEstado(pedido, siguiente.estado)}
+            >
+              {siguiente.accion}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={() => onCambiarEstado(pedido, 'listo')}
+            >
+              Deshacer entrega
+            </button>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -180,7 +201,7 @@ export function PedidoFormSheet({
   const precioSugerido = Math.round(resumen?.precioVentaLote || 0);
   const precioFinal = Number(precio) > 0 ? Number(precio) : precioSugerido;
   const costo = Math.round(resumen?.costoTotalLote || 0);
-  const ganancia = precioFinal - costo;
+  const ganancia = resumen?.costoIncompleto ? 0 : precioFinal - costo;
   const unidPack = receta ? Math.max(1, receta.unidades_por_pack) : 1;
   const atajos = receta
     ? unidPack > 1
@@ -241,14 +262,20 @@ export function PedidoFormSheet({
       onClose={onClose}
       pie={
         <div>
-          {resumen && unidadesNum > 0 && (
-            <div className="num mb-3 flex items-baseline justify-between text-sm">
-              <span className="text-ink-soft">Te cuesta {formatearMoneda(costo)}</span>
-              <span className={`font-bold ${ganancia > 0 ? 'text-ok' : 'text-bad'}`}>
-                {ganancia >= 0 ? 'Ganas' : 'Pierdes'} {formatearMoneda(Math.abs(ganancia))}
-              </span>
-            </div>
-          )}
+          {resumen &&
+            unidadesNum > 0 &&
+            (resumen.costoIncompleto ? (
+              <div className="mb-3 rounded-lg bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
+                Costo incompleto: falta completar datos para calcular la ganancia real.
+              </div>
+            ) : (
+              <div className="num mb-3 flex items-baseline justify-between text-sm">
+                <span className="text-ink-soft">Te cuesta {formatearMoneda(costo)}</span>
+                <span className={`font-bold ${ganancia > 0 ? 'text-ok' : 'text-bad'}`}>
+                  {ganancia >= 0 ? 'Ganas' : 'Pierdes'} {formatearMoneda(Math.abs(ganancia))}
+                </span>
+              </div>
+            ))}
           <div className="flex items-center gap-3">
             {pedidoInicial && onEliminar && (
               <button
@@ -503,7 +530,7 @@ export default function PedidosView({
   const sinProductos = recetas.length === 0;
 
   return (
-    <div className="space-y-6">
+    <div className="anim-rise space-y-6">
       <EncabezadoVista
         titulo="Pedidos"
         ayuda="Lo que tienes que entregar, cuándo, y cuánto te falta cobrar."

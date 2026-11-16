@@ -1,11 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Receta, ResumenCostosReceta } from '@/lib/types';
 import { formatearMoneda, singular } from '@/lib/costing';
 import { Vacio, EncabezadoVista, Etiqueta } from './ui';
 import { TONO_SALUD, TEXTO_SALUD } from './RecipeDetailView';
-import { Plus, CaretRight, Cookie } from '@phosphor-icons/react';
+import { Plus, CaretRight, Cookie, MagnifyingGlass } from '@phosphor-icons/react';
 
 export default function ProductosView({
   recetas,
@@ -18,8 +18,14 @@ export default function ProductosView({
   onAbrir: (id: string) => void;
   onNuevo: () => void;
 }) {
+  const [busqueda, setBusqueda] = useState('');
+  const visibles = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return q ? recetas.filter((r) => r.nombre.toLowerCase().includes(q)) : recetas;
+  }, [recetas, busqueda]);
+
   return (
-    <div className="space-y-6">
+    <div className="anim-rise space-y-6">
       <EncabezadoVista
         titulo="Productos"
         ayuda="Lo que vendes. Para cada uno te mostramos cuánto te cuesta hacerlo, a cuánto lo vendes y cuánto te queda."
@@ -32,6 +38,22 @@ export default function ProductosView({
         )}
       </EncabezadoVista>
 
+      {recetas.length > 5 && (
+        <div className="relative sm:max-w-xs">
+          <MagnifyingGlass
+            size={18}
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+          />
+          <input
+            type="search"
+            placeholder="Buscar producto"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="input pl-10"
+          />
+        </div>
+      )}
+
       {recetas.length === 0 ? (
         <Vacio
           icono={<Cookie size={28} weight="duotone" />}
@@ -43,31 +65,55 @@ export default function ProductosView({
             Crear producto
           </button>
         </Vacio>
+      ) : visibles.length === 0 ? (
+        <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+          No hay productos que coincidan con “{busqueda}”.
+        </p>
       ) : (
         <ul className="card divide-y divide-line overflow-hidden">
-          {recetas.map((rec) => {
+          {visibles.map((rec) => {
             const res = resumenes.get(rec.id);
             if (!res) return null;
             const vendeEnPack = rec.unidades_por_pack > 1;
             const nombreVenta = vendeEnPack ? rec.nombre_pack : singular(rec.rendimiento_unidad);
-            const sinCosto = res.costoTotalLote <= 0;
+            const incompleto = res.costoIncompleto;
             const atencion = res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo';
             return (
               <li key={rec.id}>
                 <button
                   type="button"
                   onClick={() => onAbrir(rec.id)}
-                  className="flex w-full cursor-pointer items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-paper sm:px-5"
+                  className="flex w-full cursor-pointer items-center gap-4 px-4 py-4 text-left transition-colors duration-150 hover:bg-paper/80 active:bg-sunken/60 sm:px-5"
                 >
+                  <span
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                      incompleto
+                        ? 'bg-warn'
+                        : res.estadoSalud === 'perdida'
+                          ? 'bg-bad'
+                          : res.estadoSalud === 'bajo'
+                            ? 'bg-warn'
+                            : 'bg-ok'
+                    }`}
+                    aria-hidden="true"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[1.0625rem] font-semibold">{rec.nombre}</div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft">
                       <span>
-                        <span className="num">{formatearMoneda(res.precioVentaPack)}</span> por{' '}
-                        {nombreVenta}
+                        {res.precioVentaPack > 0 ? (
+                          <>
+                            <span className="num">{formatearMoneda(res.precioVentaPack)}</span> por{' '}
+                            {nombreVenta}
+                          </>
+                        ) : (
+                          'Precio por definir'
+                        )}
                       </span>
-                      {sinCosto ? (
-                        <Etiqueta tono="warn">Faltan ingredientes</Etiqueta>
+                      {incompleto ? (
+                        <Etiqueta tono="warn">
+                          {res.costoTotalLote > 0 ? 'Costo incompleto' : 'Faltan datos'}
+                        </Etiqueta>
                       ) : (
                         atencion && (
                           <Etiqueta tono={TONO_SALUD[res.estadoSalud]}>
@@ -77,7 +123,7 @@ export default function ProductosView({
                       )}
                     </div>
                   </div>
-                  {!sinCosto && (
+                  {!incompleto && (
                     <div className="shrink-0 text-right">
                       <div
                         className={`num text-[1.0625rem] font-bold ${

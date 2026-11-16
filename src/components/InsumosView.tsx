@@ -8,7 +8,7 @@ import {
   formatearCantidad,
   NOMBRE_UNIDAD,
 } from '@/lib/costing';
-import { Sheet, Campo, CampoDinero, Segmentos, Vacio, EncabezadoVista, Confirmar } from './ui';
+import { Sheet, Campo, CampoDinero, Segmentos, Vacio, EncabezadoVista, Confirmar, Etiqueta } from './ui';
 import { Plus, MagnifyingGlass, CaretRight, Basket, Trash } from '@phosphor-icons/react';
 
 const UNIDADES: UnidadMedida[] = ['g', 'kg', 'ml', 'l', 'u', 'cm'];
@@ -45,6 +45,7 @@ export function InsumoFormSheet({
     insumoInicial && insumoInicial.stock_actual > 0 ? String(insumoInicial.stock_actual) : ''
   );
   const [proveedor, setProveedor] = useState(insumoInicial?.proveedor || '');
+  const [notas, setNotas] = useState(insumoInicial?.notas || '');
   const [intentoGuardar, setIntentoGuardar] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
@@ -94,7 +95,7 @@ export function InsumoFormSheet({
         stock_actual: Number(stock) || 0,
         stock_minimo: insumoInicial?.stock_minimo || 0,
         proveedor,
-        notas: insumoInicial?.notas || '',
+        notas,
       });
       onClose();
     } finally {
@@ -258,6 +259,15 @@ export function InsumoFormSheet({
                 className="input"
               />
             </Campo>
+            <Campo etiqueta="Notas (opcional)">
+              <textarea
+                rows={2}
+                placeholder="Ej: equivalencia por unidad, marca o referencia"
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                className="input"
+              />
+            </Campo>
           </div>
         </details>
       </form>
@@ -304,7 +314,7 @@ export default function InsumosView({
   }, [insumos, filtro, busqueda]);
 
   return (
-    <div className="space-y-6">
+    <div className="anim-rise space-y-6">
       <EncabezadoVista
         titulo="Ingredientes y envases"
         ayuda="Todo lo que compras para tus dulces. Si un precio sube, cámbialo aquí y el costo de tus productos se actualiza solo."
@@ -379,6 +389,7 @@ export default function InsumosView({
           ) : (
             <ul className="card divide-y divide-line overflow-hidden">
               {visibles.map((ins) => {
+                const sinPrecio = (Number(ins.precio_compra) || 0) <= 0;
                 const costo = obtenerCostoUnitarioInsumo(ins).etiquetaCostoLegible;
                 const enProductos = usos.get(ins.id) || 0;
                 return (
@@ -386,14 +397,18 @@ export default function InsumosView({
                     <button
                       type="button"
                       onClick={() => onEditar(ins)}
-                      className="flex w-full cursor-pointer items-center gap-4 px-4 py-3.5 text-left transition-colors hover:bg-paper sm:px-5"
+                      className="flex w-full cursor-pointer items-center gap-4 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-paper/80 active:bg-sunken/60 sm:px-5"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{ins.nombre}</div>
                         <div className="mt-0.5 text-sm text-ink-soft">
                           {ins.tipo === 'empaque' ? 'Envase' : 'Paquete'} de{' '}
                           {formatearCantidad(ins.cantidad_paquete, ins.unidad)} ·{' '}
-                          <span className="num">{formatearMoneda(ins.precio_compra)}</span>
+                          {sinPrecio ? (
+                            <span className="text-warn">Precio por confirmar</span>
+                          ) : (
+                            <span className="num">{formatearMoneda(ins.precio_compra)}</span>
+                          )}
                           {enProductos > 0 && (
                             <span className="hidden sm:inline">
                               {' '}
@@ -402,7 +417,11 @@ export default function InsumosView({
                           )}
                         </div>
                       </div>
-                      <div className="num shrink-0 text-right text-sm font-semibold">{costo}</div>
+                      {sinPrecio ? (
+                        <Etiqueta tono="warn">Falta precio</Etiqueta>
+                      ) : (
+                        <div className="num shrink-0 text-right text-sm font-semibold">{costo}</div>
+                      )}
                       <CaretRight size={16} weight="bold" className="shrink-0 text-ink-soft" />
                     </button>
                   </li>
