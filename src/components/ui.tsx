@@ -52,29 +52,29 @@ export function Sheet({
     >
       <div
         className={`anim-sheet flex w-full ${anchoClase} ${
-          alta ? 'h-[96dvh] sm:h-auto sm:max-h-[92dvh]' : 'max-h-[94dvh]'
-        } flex-col rounded-t-[20px] border border-line/80 bg-surface shadow-[0_-12px_40px_rgba(54,32,41,0.18)] sm:rounded-[20px] sm:shadow-[0_24px_60px_rgba(54,32,41,0.24)]`}
+          alta ? 'h-[95dvh] sm:h-auto sm:max-h-[91dvh]' : 'max-h-[93dvh]'
+        } flex-col rounded-t-[24px] border border-line/90 bg-surface shadow-[0_-12px_40px_rgba(54,32,41,0.18)] sm:rounded-[24px] sm:shadow-[0_24px_60px_rgba(54,32,41,0.24)]`}
       >
         <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden="true">
           <span className="h-1 w-10 rounded-full bg-line-strong" />
         </div>
-        <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="flex items-start justify-between gap-3 border-b border-line px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <h2 className="font-display text-xl font-semibold leading-tight">{titulo}</h2>
+            <h2 className="font-display text-xl font-bold leading-tight sm:text-[1.375rem]">{titulo}</h2>
             {subtitulo && <div className="mt-1 text-sm text-ink-soft">{subtitulo}</div>}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
-            className="-mr-2 -mt-1 flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-soft hover:bg-sunken hover:text-ink"
+            className="-mr-1.5 -mt-1 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-soft transition-[background-color,color,transform] duration-150 hover:bg-sunken hover:text-ink active:scale-95"
           >
             <X size={20} weight="bold" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
         {pie && (
-          <div className="border-t border-line px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="border-t border-line bg-paper/45 px-4 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] sm:rounded-b-[24px] sm:px-6 sm:py-4">
             {pie}
           </div>
         )}
@@ -201,7 +201,7 @@ export function Segmentos<T extends string>({
 }) {
   return (
     <div
-      className={`flex gap-1 overflow-x-auto rounded-xl bg-sunken p-1 ring-1 ring-inset ring-line ${className}`}
+      className={`no-scrollbar flex gap-1 overflow-x-auto rounded-2xl bg-sunken/85 p-1 ring-1 ring-inset ring-line ${className}`}
       role="tablist"
     >
       {opciones.map((op) => {
@@ -213,17 +213,17 @@ export function Segmentos<T extends string>({
             role="tab"
             aria-selected={activo}
             onClick={() => onChange(op.id)}
-            className={`flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-2.5 text-[0.8125rem] font-semibold transition-all duration-150 active:scale-[0.98] sm:px-3 sm:text-sm ${
+            className={`flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98] sm:gap-1.5 sm:px-3.5 sm:text-sm ${
               activo
-                ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(54,32,41,0.12)]'
+                ? 'bg-surface text-berry-dark shadow-[0_1px_4px_rgba(54,32,41,0.1)]'
                 : 'text-ink-soft hover:text-ink'
             }`}
           >
             <span>{op.etiqueta}</span>
             {typeof op.cuenta === 'number' && op.cuenta > 0 && (
               <span
-                className={`num rounded-full px-1.5 text-xs ${
-                  activo ? 'bg-berry-soft text-berry-dark' : 'bg-line text-ink-soft'
+                className={`num rounded-full px-1.5 py-0.25 text-xs ${
+                  activo ? 'bg-berry-soft text-berry-dark' : 'bg-surface/75 text-ink-soft'
                 }`}
               >
                 {op.cuenta}
@@ -240,14 +240,15 @@ export function Segmentos<T extends string>({
 /* Etiquetas de estado                                                         */
 /* -------------------------------------------------------------------------- */
 
-export type Tono = 'ok' | 'warn' | 'bad' | 'neutro' | 'berry';
+export type Tono = 'ok' | 'warn' | 'bad' | 'neutro' | 'berry' | 'lila';
 
 const TONOS: Record<Tono, string> = {
-  ok: 'bg-ok-soft text-ok ring-1 ring-inset ring-ok/15',
-  warn: 'bg-warn-soft text-warn ring-1 ring-inset ring-warn/15',
-  bad: 'bg-bad-soft text-bad ring-1 ring-inset ring-bad/15',
-  neutro: 'bg-sunken text-ink-soft ring-1 ring-inset ring-line-strong/45',
-  berry: 'bg-berry-soft text-berry-dark ring-1 ring-inset ring-berry/15',
+  ok: 'bg-ok-soft text-ok ring-1 ring-inset ring-ok/20',
+  warn: 'bg-warn-soft text-warn ring-1 ring-inset ring-warn/20',
+  bad: 'bg-bad-soft text-bad ring-1 ring-inset ring-bad/20',
+  neutro: 'bg-sunken text-ink-soft ring-1 ring-inset ring-line-strong/55',
+  berry: 'bg-berry-soft text-berry-dark ring-1 ring-inset ring-berry/20',
+  lila: 'bg-lila-soft text-lila-ink ring-1 ring-inset ring-lila/50',
 };
 
 export function Etiqueta({
@@ -282,14 +283,18 @@ export function Vacio({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="card anim-rise flex flex-col items-center px-6 py-12 text-center">
+    <div className="card-atelier anim-rise flex flex-col items-center px-6 py-12 text-center sm:py-14">
       {icono && (
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-berry-soft text-berry ring-1 ring-inset ring-berry/15 shadow-[0_6px_18px_rgba(141,83,107,0.12)]">
-          {icono}
+        <div className="mb-5 rounded-[22px] bg-berry-soft/75 p-1.5 ring-1 ring-inset ring-berry/15">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface text-berry shadow-[0_4px_14px_rgba(141,83,107,0.12)]">
+            {icono}
+          </div>
         </div>
       )}
-      <h3 className="font-display text-2xl font-semibold">{titulo}</h3>
-      <p className="mt-2 max-w-md text-[0.9375rem] text-ink-soft">{texto}</p>
+      <h3 className="font-display text-[clamp(1.375rem,1.2rem+0.7vw,1.625rem)] font-bold">
+        {titulo}
+      </h3>
+      <p className="mt-2 max-w-[46ch] text-[0.9375rem] leading-relaxed text-ink-soft">{texto}</p>
       {children && <div className="mt-6 flex flex-wrap justify-center gap-3">{children}</div>}
     </div>
   );
@@ -297,23 +302,34 @@ export function Vacio({
 
 /** Encabezado de cada pantalla: título, una línea de ayuda y la acción principal */
 export function EncabezadoVista({
+  etiqueta,
   titulo,
   ayuda,
   children,
 }: {
+  etiqueta?: string;
   titulo: string;
   ayuda?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
-        <h1 className="font-display text-[1.75rem] font-semibold leading-tight sm:text-[2rem]">
+        {etiqueta && <p className="eyebrow mb-1 text-berry">{etiqueta}</p>}
+        <h1 className="font-display text-[clamp(1.625rem,1.35rem+1.1vw,2.125rem)] font-bold leading-[1.12]">
           {titulo}
         </h1>
-        {ayuda && <p className="mt-1.5 max-w-xl text-[0.9375rem] text-ink-soft">{ayuda}</p>}
+        {ayuda && (
+          <p className="mt-1.5 max-w-[58ch] text-[0.9375rem] leading-relaxed text-ink-soft">
+            {ayuda}
+          </p>
+        )}
       </div>
-      {children && <div className="flex w-full flex-wrap gap-2.5 sm:w-auto sm:gap-3">{children}</div>}
-    </div>
+      {children && (
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto sm:gap-3">
+          {children}
+        </div>
+      )}
+    </header>
   );
 }

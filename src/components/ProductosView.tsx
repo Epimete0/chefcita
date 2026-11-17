@@ -3,54 +3,95 @@
 import React, { useMemo, useState } from 'react';
 import { Receta, ResumenCostosReceta } from '@/lib/types';
 import { formatearMoneda, singular } from '@/lib/costing';
-import { Vacio, EncabezadoVista, Etiqueta } from './ui';
+import { Vacio, EncabezadoVista, Etiqueta, Segmentos } from './ui';
 import { TONO_SALUD, TEXTO_SALUD } from './RecipeDetailView';
-import { Plus, CaretRight, Cookie, MagnifyingGlass } from '@phosphor-icons/react';
+import { Plus, CaretRight, Cookie, MagnifyingGlass, Star } from '@phosphor-icons/react';
 
 export default function ProductosView({
   recetas,
   resumenes,
+  filtroInicial = 'todos',
   onAbrir,
   onNuevo,
+  onRegistrarVenta,
 }: {
   recetas: Receta[];
   resumenes: Map<string, ResumenCostosReceta>;
+  filtroInicial?: 'todos' | 'revisar';
   onAbrir: (id: string) => void;
   onNuevo: () => void;
+  onRegistrarVenta?: (receta: Receta) => void;
 }) {
   const [busqueda, setBusqueda] = useState('');
+  const [filtro, setFiltro] = useState<'todos' | 'revisar'>(filtroInicial);
+
+  const porRevisarCount = useMemo(
+    () =>
+      recetas.filter((r) => {
+        const res = resumenes.get(r.id);
+        return res && (res.costoIncompleto || res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo');
+      }).length,
+    [recetas, resumenes]
+  );
+
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return q ? recetas.filter((r) => r.nombre.toLowerCase().includes(q)) : recetas;
-  }, [recetas, busqueda]);
+    return recetas
+      .filter((r) => {
+        if (filtro === 'revisar') {
+          const res = resumenes.get(r.id);
+          if (!res || (!res.costoIncompleto && res.estadoSalud !== 'perdida' && res.estadoSalud !== 'bajo')) {
+            return false;
+          }
+        }
+        return !q || r.nombre.toLowerCase().includes(q);
+      })
+      .sort((a, b) => Number(b.favorita) - Number(a.favorita) || a.nombre.localeCompare(b.nombre));
+  }, [recetas, resumenes, filtro, busqueda]);
 
   return (
     <div className="anim-rise space-y-6">
       <EncabezadoVista
+        etiqueta="Catálogo y márgenes"
         titulo="Productos"
         ayuda="Lo que vendes. Para cada uno te mostramos cuánto te cuesta hacerlo, a cuánto lo vendes y cuánto te queda."
       >
         {recetas.length > 0 && (
-          <button type="button" className="btn btn-primary" onClick={onNuevo}>
+          <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={onNuevo}>
             <Plus size={18} weight="bold" />
             Nuevo producto
           </button>
         )}
       </EncabezadoVista>
 
-      {recetas.length > 5 && (
-        <div className="relative sm:max-w-xs">
-          <MagnifyingGlass
-            size={18}
-            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
-          />
-          <input
-            type="search"
-            placeholder="Buscar producto"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className="input pl-10"
-          />
+      {(recetas.length > 3 || porRevisarCount > 0) && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {porRevisarCount > 0 && (
+            <Segmentos
+              className="sm:w-72"
+              opciones={[
+                { id: 'todos', etiqueta: 'Todos', cuenta: recetas.length },
+                { id: 'revisar', etiqueta: 'Por revisar', cuenta: porRevisarCount },
+              ]}
+              valor={filtro}
+              onChange={setFiltro}
+            />
+          )}
+          {recetas.length > 3 && (
+            <div className={`relative ${porRevisarCount > 0 ? 'sm:ml-auto' : ''} sm:w-64`}>
+              <MagnifyingGlass
+                size={18}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+              />
+              <input
+                type="search"
+                placeholder="Buscar producto"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="input pl-10"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -66,86 +107,109 @@ export default function ProductosView({
           </button>
         </Vacio>
       ) : visibles.length === 0 ? (
-        <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+        <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
           No hay productos que coincidan con “{busqueda}”.
         </p>
       ) : (
-        <ul className="card divide-y divide-line overflow-hidden">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {visibles.map((rec) => {
             const res = resumenes.get(rec.id);
             if (!res) return null;
             const vendeEnPack = rec.unidades_por_pack > 1;
             const nombreVenta = vendeEnPack ? rec.nombre_pack : singular(rec.rendimiento_unidad);
             const incompleto = res.costoIncompleto;
-            const atencion = res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo';
+            const tono = incompleto ? 'warn' : TONO_SALUD[res.estadoSalud];
+
             return (
-              <li key={rec.id}>
+              <article
+                key={rec.id}
+                className="card card-interactive flex min-w-0 flex-col justify-between overflow-hidden"
+              >
                 <button
                   type="button"
                   onClick={() => onAbrir(rec.id)}
-                  className="flex w-full cursor-pointer items-center gap-4 px-4 py-4 text-left transition-colors duration-150 hover:bg-paper/80 active:bg-sunken/60 sm:px-5"
+                  className="flex flex-1 cursor-pointer flex-col p-4 text-left sm:p-5"
                 >
-                  <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                      incompleto
-                        ? 'bg-warn'
-                        : res.estadoSalud === 'perdida'
-                          ? 'bg-bad'
-                          : res.estadoSalud === 'bajo'
-                            ? 'bg-warn'
-                            : 'bg-ok'
-                    }`}
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[1.0625rem] font-semibold">{rec.nombre}</div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-soft">
-                      <span>
-                        {res.precioVentaPack > 0 ? (
-                          <>
-                            <span className="num">{formatearMoneda(res.precioVentaPack)}</span> por{' '}
-                            {nombreVenta}
-                          </>
-                        ) : (
-                          'Precio por definir'
-                        )}
-                      </span>
-                      {incompleto ? (
-                        <Etiqueta tono="warn">
-                          {res.costoTotalLote > 0 ? 'Costo incompleto' : 'Faltan datos'}
-                        </Etiqueta>
-                      ) : (
-                        atencion && (
-                          <Etiqueta tono={TONO_SALUD[res.estadoSalud]}>
-                            {TEXTO_SALUD[res.estadoSalud]}
-                          </Etiqueta>
-                        )
-                      )}
-                    </div>
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <Etiqueta tono={tono}>
+                      {incompleto
+                        ? res.costoTotalLote > 0
+                          ? 'Costo incompleto'
+                          : 'Faltan datos'
+                        : TEXTO_SALUD[res.estadoSalud]}
+                    </Etiqueta>
+                    {rec.favorita && (
+                      <Star size={16} weight="fill" className="shrink-0 text-berry" aria-label="Favorito" />
+                    )}
                   </div>
-                  {!incompleto && (
-                    <div className="shrink-0 text-right">
-                      <div
-                        className={`num text-[1.0625rem] font-bold ${
-                          res.gananciaPorPack <= 0
-                            ? 'text-bad'
-                            : res.estadoSalud === 'bajo'
-                              ? 'text-warn'
-                              : 'text-ok'
+
+                  <h2 className="font-display mt-3 text-lg font-bold leading-snug text-ink">
+                    {rec.nombre}
+                  </h2>
+                  <p className="mt-0.5 text-sm text-ink-soft">
+                    Por {nombreVenta} · salen {rec.rendimiento_cantidad} {rec.rendimiento_unidad}
+                  </p>
+
+                  <dl className="num mt-4 grid w-full grid-cols-3 gap-2 rounded-xl bg-paper/80 p-3 text-xs">
+                    <div className="min-w-0">
+                      <dt className="text-ink-soft">Costo</dt>
+                      <dd className="mt-0.5 truncate text-sm font-semibold text-ink">
+                        {res.costoPorPack > 0 ? formatearMoneda(res.costoPorPack) : '—'}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-ink-soft">Venta</dt>
+                      <dd className="mt-0.5 truncate text-sm font-semibold text-ink">
+                        {res.precioVentaPack > 0 ? formatearMoneda(res.precioVentaPack) : '—'}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="text-ink-soft">Ganancia</dt>
+                      <dd
+                        className={`mt-0.5 truncate text-sm font-bold ${
+                          incompleto
+                            ? 'text-ink-soft'
+                            : res.gananciaPorPack <= 0
+                              ? 'text-bad'
+                              : res.estadoSalud === 'bajo'
+                                ? 'text-warn'
+                                : 'text-ok'
                         }`}
                       >
-                        {res.gananciaPorPack < 0 ? '-' : '+'}
-                        {formatearMoneda(Math.abs(res.gananciaPorPack))}
-                      </div>
-                      <div className="text-sm text-ink-soft">ganancia</div>
+                        {incompleto
+                          ? '—'
+                          : `${res.gananciaPorPack < 0 ? '-' : '+'}${formatearMoneda(
+                              Math.abs(res.gananciaPorPack)
+                            )}`}
+                      </dd>
                     </div>
-                  )}
-                  <CaretRight size={16} weight="bold" className="shrink-0 text-ink-soft" />
+                  </dl>
                 </button>
-              </li>
+
+                <div className="flex items-center justify-between gap-2 border-t border-line bg-paper/45 px-4 py-2.5 sm:px-5">
+                  <button
+                    type="button"
+                    onClick={() => onAbrir(rec.id)}
+                    className="inline-flex min-h-[36px] cursor-pointer items-center gap-1 text-sm font-semibold text-berry hover:underline"
+                  >
+                    Ver detalle
+                    <CaretRight size={14} weight="bold" />
+                  </button>
+                  {onRegistrarVenta && (
+                    <button
+                      type="button"
+                      onClick={() => onRegistrarVenta(rec)}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <Plus size={14} weight="bold" />
+                      Venta
+                    </button>
+                  )}
+                </div>
+              </article>
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );

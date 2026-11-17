@@ -23,6 +23,7 @@ import {
   CheckCircle,
   Circle,
   Check,
+  Copy,
 } from '@phosphor-icons/react';
 
 interface RecipeDetailViewProps {
@@ -63,6 +64,7 @@ const COLOR_TEXTO: Record<Tono, string> = {
   bad: 'text-bad',
   neutro: 'text-ink',
   berry: 'text-berry',
+  lila: 'text-lila-ink',
 };
 
 function formatearTiempo(seg: number) {
@@ -93,6 +95,7 @@ export default function RecipeDetailView({
   const [timerPaso, setTimerPaso] = useState<string | null>(null);
   const [timerSeg, setTimerSeg] = useState(0);
   const [timerCorriendo, setTimerCorriendo] = useState(false);
+  const [copiadoIngredientes, setCopiadoIngredientes] = useState(false);
 
   // Si el precio guardado cambia (por ejemplo al editar el producto), el campo lo refleja
   const [precioGuardado, setPrecioGuardado] = useState(receta.precio_venta_pack);
@@ -167,9 +170,9 @@ export default function RecipeDetailView({
   // Reparto de cada venta
   const venta = Math.max(r.precioVentaLote, r.costoTotalLote, 1);
   const partes = [
-    { nombre: 'Ingredientes', valor: r.costoIngredientesTotal, color: 'bg-ink' },
-    { nombre: 'Envases', valor: r.costoEmpaque, color: 'bg-ink/55' },
-    { nombre: 'Gas, luz y otros', valor: r.costoGastosExtras + r.costoManoObra, color: 'bg-ink/25' },
+    { nombre: 'Ingredientes', valor: r.costoIngredientesTotal, color: 'bg-berry' },
+    { nombre: 'Envases', valor: r.costoEmpaque, color: 'bg-lila' },
+    { nombre: 'Gas, luz y otros', valor: r.costoGastosExtras + r.costoManoObra, color: 'bg-amarillo' },
     { nombre: 'Tu ganancia', valor: Math.max(0, r.gananciaPorLote), color: 'bg-ok' },
   ].filter((p) => p.valor > 0);
 
@@ -223,7 +226,7 @@ export default function RecipeDetailView({
         </button>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
           <div className="min-w-0">
-            <h1 className="font-display text-[1.75rem] font-semibold leading-tight sm:text-[2rem]">
+            <h1 className="font-display text-[clamp(1.625rem,1.35rem+1.1vw,2.125rem)] font-bold leading-[1.12]">
               {receta.nombre}
             </h1>
             <p className="mt-1 text-[0.9375rem] text-ink-soft">
@@ -231,19 +234,19 @@ export default function RecipeDetailView({
               {vendeEnPack ? ` · se vende en ${receta.nombre_pack}` : ' · se vende de a uno'}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2.5 sm:gap-3">
-            <button type="button" className="btn btn-secondary" onClick={() => onEditarReceta(receta)}>
+          <div className="flex w-full flex-wrap gap-2.5 sm:w-auto sm:gap-3">
+            <button type="button" className="btn btn-secondary flex-1 sm:flex-initial" onClick={() => onEditarReceta(receta)}>
               <PencilSimple size={18} />
               Editar
             </button>
-            <button type="button" className="btn btn-secondary" onClick={() => onNuevoPedido(receta)}>
+            <button type="button" className="btn btn-secondary flex-1 sm:flex-initial" onClick={() => onNuevoPedido(receta)}>
               <Plus size={18} weight="bold" />
               Pedido
             </button>
             {onRegistrarVenta && (
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary w-full sm:w-auto"
                 onClick={() => onRegistrarVenta(receta)}
               >
                 <Plus size={18} weight="bold" />
@@ -266,7 +269,7 @@ export default function RecipeDetailView({
 
       {/* ============================ PRECIO Y GANANCIA ============================ */}
       {pestana === 'precio' && (
-        <div className="grid gap-6 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
           <div className="min-w-0 space-y-6 lg:col-span-3">
             {incompleto ? (
               <div className="card p-5 sm:p-6">
@@ -316,7 +319,7 @@ export default function RecipeDetailView({
                 </button>
               </div>
             ) : (
-              <div className="card overflow-hidden p-5 sm:p-6">
+              <div className="card-atelier overflow-hidden p-5 sm:p-6">
                 <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-3">
                   <div>
                     <dt className="text-sm text-ink-soft">Te cuesta</dt>
@@ -533,7 +536,7 @@ export default function RecipeDetailView({
       {pestana === 'preparar' && (
         <div className="space-y-6">
           {timerPaso && (
-            <div className="sticky top-20 z-20 flex items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3 text-white shadow-[0_8px_24px_rgba(54,32,41,0.25)]">
+            <div className="sticky top-[74px] z-20 flex items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3 text-white shadow-[0_8px_24px_rgba(54,32,41,0.25)]">
               <div className="flex items-center gap-3">
                 <Timer size={24} weight="duotone" />
                 <span className="num font-display text-2xl font-semibold">
@@ -593,23 +596,65 @@ export default function RecipeDetailView({
               <strong className="num text-ink">
                 {Math.round(rPreparar.rendimientoEscalado * 10) / 10} {receta.rendimiento_unidad}
               </strong>
+              {!rPreparar.costoIncompleto && rPreparar.costoTotalLote > 0 && (
+                <>
+                  {' '}
+                  · costo est.{' '}
+                  <strong className="num text-ink">
+                    {formatearMoneda(rPreparar.costoTotalLote)}
+                  </strong>
+                </>
+              )}
               . Las cantidades de abajo ya están ajustadas.
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
             <div className="card min-w-0 p-5 lg:col-span-2">
-              <div className="flex items-baseline justify-between">
-                <h2 className="text-lg font-bold">Lo que necesitas</h2>
-                {Object.values(marcados).some(Boolean) && (
-                  <button
-                    type="button"
-                    onClick={() => setMarcados({})}
-                    className="cursor-pointer text-sm font-semibold text-berry hover:underline"
-                  >
-                    Desmarcar todo
-                  </button>
-                )}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-display text-lg font-bold">Lo que necesitas</h2>
+                <div className="flex items-center gap-3">
+                  {Object.values(marcados).some(Boolean) && (
+                    <button
+                      type="button"
+                      onClick={() => setMarcados({})}
+                      className="cursor-pointer text-sm font-semibold text-berry hover:underline"
+                    >
+                      Desmarcar
+                    </button>
+                  )}
+                  {gruposPreparar.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const lineas = [
+                          `${receta.nombre} (${Math.round(rPreparar.rendimientoEscalado * 10) / 10} ${receta.rendimiento_unidad})`,
+                          ...gruposPreparar.flatMap((g) => [
+                            `\n${g.titulo}:`,
+                            ...g.lista.map(
+                              (d) =>
+                                `- ${d.insumo?.nombre || 'Ingrediente'}: ${formatearCantidad(
+                                  d.cantidadEscalada,
+                                  d.item.unidad
+                                )}`
+                            ),
+                          ]),
+                        ].join('\n');
+                        try {
+                          await navigator.clipboard.writeText(lineas);
+                          setCopiadoIngredientes(true);
+                          setTimeout(() => setCopiadoIngredientes(false), 2000);
+                        } catch {
+                          // Ignorar si clipboard no está disponible
+                        }
+                      }}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      {copiadoIngredientes ? <Check size={15} weight="bold" /> : <Copy size={15} />}
+                      {copiadoIngredientes ? 'Copiado' : 'Copiar'}
+                    </button>
+                  )}
+                </div>
               </div>
               {gruposPreparar.length === 0 ? (
                 <p className="mt-3 text-[0.9375rem] text-ink-soft">
@@ -657,7 +702,7 @@ export default function RecipeDetailView({
 
             <div className="card min-w-0 p-5 lg:col-span-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-lg font-bold">Paso a paso</h2>
+                <h2 className="font-display text-lg font-bold">Paso a paso</h2>
                 {receta.pasos.length > 0 && (
                   <span className="num text-sm font-medium text-ink-soft">
                     {receta.pasos.filter((p) => pasosHechos[p.id]).length} de {receta.pasos.length}{' '}
@@ -665,9 +710,22 @@ export default function RecipeDetailView({
                   </span>
                 )}
               </div>
+              {receta.pasos.length > 0 && (
+                <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-sunken" aria-hidden="true">
+                  <div
+                    className="h-full rounded-full bg-ok transition-[width] duration-300"
+                    style={{
+                      width: `${Math.round(
+                        (receta.pasos.filter((p) => pasosHechos[p.id]).length / receta.pasos.length) *
+                          100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              )}
               {receta.pasos.length === 0 ? (
                 <div className="mt-3">
-                  <p className="text-[0.9375rem] text-ink-soft">
+                  <p className="max-w-[54ch] text-[0.9375rem] text-ink-soft">
                     Aún no anotas los pasos de esta receta. Si los agregas, puedes seguirlos desde
                     aquí mientras cocinas, con temporizador incluido.
                   </p>
@@ -684,7 +742,7 @@ export default function RecipeDetailView({
                   {receta.pasos.map((paso, idx) => {
                     const hecho = Boolean(pasosHechos[paso.id]);
                     return (
-                      <li key={paso.id} className="flex items-start gap-3 py-3">
+                      <li key={paso.id} className="flex items-start gap-3 py-3.5">
                         <button
                           type="button"
                           aria-pressed={hecho}
@@ -699,7 +757,11 @@ export default function RecipeDetailView({
                           {hecho ? <Check size={16} weight="bold" /> : idx + 1}
                         </button>
                         <div className="min-w-0 flex-1">
-                          <p className={`leading-relaxed ${hecho ? 'text-ink-soft line-through' : ''}`}>
+                          <p
+                            className={`max-w-[60ch] leading-relaxed ${
+                              hecho ? 'text-ink-soft line-through' : ''
+                            }`}
+                          >
                             {paso.instruccion}
                           </p>
                           {paso.tip_secreto && (

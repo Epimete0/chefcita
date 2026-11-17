@@ -9,6 +9,7 @@ import {
   formatearMoneda,
   formatearCantidad,
   hoyISO,
+  sumarDiasISO,
   ItemCompra,
 } from '@/lib/costing';
 import {
@@ -22,7 +23,18 @@ import {
   Confirmar,
   Tono,
 } from './ui';
-import { Plus, Trash, ClipboardText, PencilSimple, Copy, Check, ShoppingBag } from '@phosphor-icons/react';
+import {
+  Plus,
+  Trash,
+  ClipboardText,
+  PencilSimple,
+  Copy,
+  Check,
+  ShoppingBag,
+  MagnifyingGlass,
+  CheckCircle,
+  Circle,
+} from '@phosphor-icons/react';
 
 const ESTADO: Record<EstadoPedido, { texto: string; tono: Tono }> = {
   pendiente: { texto: 'Por preparar', tono: 'neutro' },
@@ -58,10 +70,33 @@ export function TarjetaPedido({
   onCambiarEstado: (pedido: Pedido, estado: EstadoPedido) => void;
   onEditar: (pedido: Pedido) => void;
 }) {
+  const [copiado, setCopiado] = useState(false);
   const fecha = describirFecha(pedido.fecha_entrega);
   const entregado = pedido.estado === 'entregado';
   const faltaCobrar = Math.max(0, pedido.precio_venta_total - pedido.seña_pagada);
   const siguiente = SIGUIENTE[pedido.estado];
+
+  const copiarPedido = async () => {
+    const lineas = [
+      `Pedido · ${pedido.cliente_nombre}`,
+      `${pedido.unidades_totales} × ${pedido.receta_nombre_snapshot}`,
+      `Entrega: ${fecha.texto.replace('Atrasado · ', '')}`,
+      `Total: ${formatearMoneda(pedido.precio_venta_total)}`,
+      ...(pedido.seña_pagada > 0 && !entregado
+        ? [`Abonado: ${formatearMoneda(pedido.seña_pagada)}`]
+        : []),
+      ...(!entregado
+        ? [faltaCobrar > 0 ? `Falta cobrar: ${formatearMoneda(faltaCobrar)}` : 'Pagado completo']
+        : []),
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(lineas);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Ignorar si clipboard no está disponible
+    }
+  };
 
   const acentoUrgencia =
     !entregado && fecha.tono === 'atrasado'
@@ -70,28 +105,65 @@ export function TarjetaPedido({
         ? 'border-l-4 border-l-berry'
         : '';
 
+  const indiceEstado =
+    pedido.estado === 'pendiente' ? 0 : pedido.estado === 'en_preparacion' ? 1 : 2;
+
   return (
-    <article className={`card card-interactive flex flex-col justify-between p-4 sm:p-5 ${acentoUrgencia}`}>
+    <article className={`card card-interactive flex min-w-0 flex-col justify-between p-4 sm:p-5 ${acentoUrgencia}`}>
       <div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {!entregado && <Etiqueta tono={TONO_FECHA[fecha.tono]}>{fecha.texto}</Etiqueta>}
           <Etiqueta tono={ESTADO[pedido.estado].tono}>{ESTADO[pedido.estado].texto}</Etiqueta>
-          <button
-            type="button"
-            onClick={() => onEditar(pedido)}
-            aria-label={`Editar pedido de ${pedido.cliente_nombre}`}
-            className="-my-1 -mr-2 ml-auto flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft hover:bg-sunken hover:text-ink"
-          >
-            <PencilSimple size={18} />
-          </button>
+          <div className="-my-1 -mr-2 ml-auto flex items-center">
+            <button
+              type="button"
+              onClick={copiarPedido}
+              aria-label={`Copiar resumen del pedido de ${pedido.cliente_nombre}`}
+              title={copiado ? 'Copiado' : 'Copiar resumen para enviar'}
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+            >
+              {copiado ? <Check size={17} weight="bold" className="text-ok" /> : <Copy size={17} />}
+            </button>
+            <button
+              type="button"
+              onClick={() => onEditar(pedido)}
+              aria-label={`Editar pedido de ${pedido.cliente_nombre}`}
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
+            >
+              <PencilSimple size={18} />
+            </button>
+          </div>
         </div>
 
-        <h3 className="mt-2 text-[1.0625rem] font-bold leading-snug">{pedido.cliente_nombre}</h3>
+        <h3 className="font-display mt-2.5 text-lg font-bold leading-snug">{pedido.cliente_nombre}</h3>
         <p className="text-[0.9375rem] text-ink-soft">
-          <span className="num">{pedido.unidades_totales}</span> × {pedido.receta_nombre_snapshot}
+          <span className="num font-semibold text-ink">{pedido.unidades_totales}</span> ×{' '}
+          {pedido.receta_nombre_snapshot}
           {entregado && ` · ${fecha.texto.replace('Atrasado · ', '')}`}
         </p>
-        {pedido.notas && <p className="mt-1 text-sm text-ink-soft">“{pedido.notas}”</p>}
+        {pedido.notas && (
+          <p className="mt-1.5 rounded-lg bg-paper/80 px-2.5 py-1.5 text-sm text-ink-soft">
+            “{pedido.notas}”
+          </p>
+        )}
+
+        {!entregado && (
+          <div className="mt-3 flex items-center gap-1.5" aria-hidden="true">
+            {['Por preparar', 'Preparando', 'Listo'].map((label, i) => (
+              <div key={label} className="flex flex-1 items-center gap-1.5">
+                <span
+                  className={`h-1.5 flex-1 rounded-full transition-colors ${
+                    i <= indiceEstado
+                      ? indiceEstado === 2
+                        ? 'bg-ok'
+                        : 'bg-berry'
+                      : 'bg-sunken'
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-4 border-t border-line pt-3">
@@ -128,7 +200,7 @@ export function TarjetaPedido({
           ) : (
             <button
               type="button"
-              className="btn btn-sm btn-ghost"
+              className="cursor-pointer rounded-lg px-2.5 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:bg-sunken hover:text-ink"
               onClick={() => onCambiarEstado(pedido, 'listo')}
             >
               Deshacer entrega
@@ -372,13 +444,35 @@ export function PedidoFormSheet({
           </div>
         </Campo>
 
-        <Campo etiqueta="¿Para cuándo?">
-          <input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="input"
-          />
+        <Campo
+          etiqueta="¿Para cuándo?"
+          ayuda={<span className="first-letter:uppercase">{describirFecha(fecha).texto}</span>}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { etiqueta: 'Hoy', valor: hoyISO() },
+              { etiqueta: 'Mañana', valor: sumarDiasISO(hoyISO(), 1) },
+              { etiqueta: 'En 3 días', valor: sumarDiasISO(hoyISO(), 3) },
+            ].map((op) => (
+              <button
+                key={op.etiqueta}
+                type="button"
+                aria-pressed={fecha === op.valor}
+                onClick={() => setFecha(op.valor)}
+                className={`btn btn-sm ${
+                  fecha === op.valor ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
+                }`}
+              >
+                {op.etiqueta}
+              </button>
+            ))}
+            <input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+              className="input min-w-[140px] flex-1"
+            />
+          </div>
         </Campo>
 
         <div className="grid gap-5 sm:grid-cols-2">
@@ -396,7 +490,16 @@ export function PedidoFormSheet({
               placeholder={precioSugerido > 0 ? String(precioSugerido) : '0'}
             />
           </Campo>
-          <Campo etiqueta="¿Ya te abonó algo?" ayuda="Déjalo vacío si aún no paga nada.">
+          <Campo
+            etiqueta="¿Ya te abonó algo?"
+            ayuda={
+              Number(abono) > 0 && precioFinal > 0
+                ? precioFinal - Number(abono) > 0
+                  ? `Faltará cobrar ${formatearMoneda(precioFinal - Number(abono))}.`
+                  : 'Queda pagado completo.'
+                : 'Déjalo vacío si aún no paga nada.'
+            }
+          >
             <CampoDinero value={abono} onChange={setAbono} placeholder="0" />
           </Campo>
         </div>
@@ -421,7 +524,9 @@ export function PedidoFormSheet({
 
 function ListaCompras({ lista, pedidosPorPreparar }: { lista: ItemCompra[]; pedidosPorPreparar: number }) {
   const [copiada, setCopiada] = useState(false);
+  const [enCarrito, setEnCarrito] = useState<Record<string, boolean>>({});
   const faltantes = lista.filter((i) => i.faltante > 0);
+  const marcadosCount = faltantes.filter((i) => enCarrito[i.insumo.id]).length;
 
   const copiar = async () => {
     const texto = ['Lista de compras', ...faltantes.map((i) => `- ${i.insumo.nombre}: ${formatearCantidad(i.faltante, i.unidadBase)}`)].join('\n');
@@ -447,34 +552,78 @@ function ListaCompras({ lista, pedidosPorPreparar }: { lista: ItemCompra[]; pedi
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[0.9375rem] text-ink-soft">
+        <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">
           Lo que necesitas para {pedidosPorPreparar === 1 ? 'tu pedido' : `tus ${pedidosPorPreparar} pedidos`}{' '}
-          por preparar. Si anotas lo que te queda en casa (en Ingredientes), lo descontamos.
+          por preparar. Toca cada fila para ir marcando lo que ya echaste al carro.
         </p>
-        {faltantes.length > 0 && (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={copiar}>
-            {copiada ? <Check size={16} weight="bold" /> : <Copy size={16} />}
-            {copiada ? 'Copiada' : 'Copiar lista'}
-          </button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {marcadosCount > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setEnCarrito({})}
+            >
+              Limpiar ({marcadosCount})
+            </button>
+          )}
+          {faltantes.length > 0 && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={copiar}>
+              {copiada ? <Check size={16} weight="bold" /> : <Copy size={16} />}
+              {copiada ? 'Copiada' : 'Copiar lista'}
+            </button>
+          )}
+        </div>
       </div>
       <ul className="card divide-y divide-line overflow-hidden">
-        {lista.map((it) => (
-          <li key={it.insumo.id} className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
-            <div className="min-w-0">
-              <div className="truncate font-semibold">{it.insumo.nombre}</div>
-              <div className="num text-sm text-ink-soft">
-                Necesitas {formatearCantidad(it.necesario, it.unidadBase)}
-                {it.enCasa > 0 && ` · tienes ${formatearCantidad(it.enCasa, it.unidadBase)}`}
-              </div>
-            </div>
-            {it.faltante > 0 ? (
-              <Etiqueta tono="berry">Comprar {formatearCantidad(it.faltante, it.unidadBase)}</Etiqueta>
-            ) : (
-              <Etiqueta tono="ok">Te alcanza</Etiqueta>
-            )}
-          </li>
-        ))}
+        {lista.map((it) => {
+          const necesitaComprar = it.faltante > 0;
+          const marcado = necesitaComprar && Boolean(enCarrito[it.insumo.id]);
+          return (
+            <li key={it.insumo.id}>
+              {necesitaComprar ? (
+                <button
+                  type="button"
+                  aria-pressed={marcado}
+                  onClick={() =>
+                    setEnCarrito((prev) => ({ ...prev, [it.insumo.id]: !prev[it.insumo.id] }))
+                  }
+                  className="flex min-h-[60px] w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-paper/75 sm:px-5"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    {marcado ? (
+                      <CheckCircle size={22} weight="fill" className="shrink-0 text-ok" />
+                    ) : (
+                      <Circle size={22} className="shrink-0 text-line-strong" />
+                    )}
+                    <div className="min-w-0">
+                      <div className={`truncate font-semibold ${marcado ? 'text-ink-soft line-through' : ''}`}>
+                        {it.insumo.nombre}
+                      </div>
+                      <div className="num text-sm text-ink-soft">
+                        Necesitas {formatearCantidad(it.necesario, it.unidadBase)}
+                        {it.enCasa > 0 && ` · tienes ${formatearCantidad(it.enCasa, it.unidadBase)}`}
+                      </div>
+                    </div>
+                  </div>
+                  <Etiqueta tono={marcado ? 'neutro' : 'berry'}>
+                    {marcado ? 'Listo' : `Comprar ${formatearCantidad(it.faltante, it.unidadBase)}`}
+                  </Etiqueta>
+                </button>
+              ) : (
+                <div className="flex items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{it.insumo.nombre}</div>
+                    <div className="num text-sm text-ink-soft">
+                      Necesitas {formatearCantidad(it.necesario, it.unidadBase)} · tienes{' '}
+                      {formatearCantidad(it.enCasa, it.unidadBase)}
+                    </div>
+                  </div>
+                  <Etiqueta tono="ok">Te alcanza</Etiqueta>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -504,6 +653,7 @@ export default function PedidosView({
   onCrearProducto: () => void;
 }) {
   const [pestana, setPestana] = useState(pestanaInicial);
+  const [busqueda, setBusqueda] = useState('');
 
   const pendientes = useMemo(
     () =>
@@ -519,6 +669,29 @@ export default function PedidosView({
         .sort((a, b) => b.fecha_entrega.localeCompare(a.fecha_entrega)),
     [pedidos]
   );
+  const q = busqueda.trim().toLowerCase();
+  const pendientesVisibles = useMemo(
+    () =>
+      q
+        ? pendientes.filter(
+            (p) =>
+              p.cliente_nombre.toLowerCase().includes(q) ||
+              p.receta_nombre_snapshot.toLowerCase().includes(q)
+          )
+        : pendientes,
+    [pendientes, q]
+  );
+  const entregadosVisibles = useMemo(
+    () =>
+      q
+        ? entregados.filter(
+            (p) =>
+              p.cliente_nombre.toLowerCase().includes(q) ||
+              p.receta_nombre_snapshot.toLowerCase().includes(q)
+          )
+        : entregados,
+    [entregados, q]
+  );
   const lista = useMemo(
     () => calcularListaCompras(pedidos, recetas, insumosMap),
     [pedidos, recetas, insumosMap]
@@ -528,15 +701,19 @@ export default function PedidosView({
   ).length;
 
   const sinProductos = recetas.length === 0;
+  const mostrarBuscador =
+    (pestana === 'pendientes' && pendientes.length > 4) ||
+    (pestana === 'entregados' && entregados.length > 4);
 
   return (
     <div className="anim-rise space-y-6">
       <EncabezadoVista
+        etiqueta="Agenda y compras"
         titulo="Pedidos"
         ayuda="Lo que tienes que entregar, cuándo, y cuánto te falta cobrar."
       >
         {pedidos.length > 0 && (
-          <button type="button" className="btn btn-primary" onClick={onNuevo}>
+          <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={onNuevo}>
             <Plus size={18} weight="bold" />
             Nuevo pedido
           </button>
@@ -569,29 +746,51 @@ export default function PedidosView({
         )
       ) : (
         <>
-          <Segmentos
-            className="sm:w-[30rem]"
-            opciones={[
-              { id: 'pendientes', etiqueta: 'Por entregar', cuenta: pendientes.length },
-              {
-                id: 'compras',
-                etiqueta: 'Qué comprar',
-                cuenta: lista.filter((i) => i.faltante > 0).length,
-              },
-              { id: 'entregados', etiqueta: 'Entregados' },
-            ]}
-            valor={pestana}
-            onChange={setPestana}
-          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Segmentos
+              className="sm:w-[30rem]"
+              opciones={[
+                { id: 'pendientes', etiqueta: 'Por entregar', cuenta: pendientes.length },
+                {
+                  id: 'compras',
+                  etiqueta: 'Qué comprar',
+                  cuenta: lista.filter((i) => i.faltante > 0).length,
+                },
+                { id: 'entregados', etiqueta: 'Entregados' },
+              ]}
+              valor={pestana}
+              onChange={setPestana}
+            />
+
+            {mostrarBuscador && (
+              <div className="relative sm:ml-auto sm:w-64">
+                <MagnifyingGlass
+                  size={18}
+                  className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+                />
+                <input
+                  type="search"
+                  placeholder="Buscar cliente o dulce"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className="input pl-10"
+                />
+              </div>
+            )}
+          </div>
 
           {pestana === 'pendientes' &&
             (pendientes.length === 0 ? (
-              <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
-                No tienes pedidos por entregar. ¡Todo al día!
+              <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                No tienes pedidos por entregar. Todo al día.
+              </p>
+            ) : pendientesVisibles.length === 0 ? (
+              <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                No hay pedidos pendientes que coincidan con “{busqueda}”.
               </p>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {pendientes.map((p) => (
+              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+                {pendientesVisibles.map((p) => (
                   <TarjetaPedido key={p.id} pedido={p} onCambiarEstado={onCambiarEstado} onEditar={onEditar} />
                 ))}
               </div>
@@ -601,12 +800,16 @@ export default function PedidosView({
 
           {pestana === 'entregados' &&
             (entregados.length === 0 ? (
-              <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+              <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
                 Aún no marcas ningún pedido como entregado.
               </p>
+            ) : entregadosVisibles.length === 0 ? (
+              <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                No hay entregas que coincidan con “{busqueda}”.
+              </p>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                {entregados.map((p) => (
+              <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+                {entregadosVisibles.map((p) => (
                   <TarjetaPedido key={p.id} pedido={p} onCambiarEstado={onCambiarEstado} onEditar={onEditar} />
                 ))}
               </div>

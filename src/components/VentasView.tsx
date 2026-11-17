@@ -224,7 +224,7 @@ function SelectorFecha({
           onChange={(e) => {
             if (e.target.value) onChange(e.target.value);
           }}
-          className="input min-w-[160px] flex-1 font-medium"
+          className="input min-w-[140px] flex-1 font-medium"
         />
       </div>
     </Campo>
@@ -478,10 +478,10 @@ function ItemVentaEditor({
       {errorCant && <p className="mt-1 text-xs font-medium text-bad">Indica la cantidad vendida.</p>}
 
       {/* Precio unitario y Total cobrado */}
-      <div className="mt-3 grid grid-cols-2 items-end gap-3">
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-ink-soft">
-            Precio por {ev.presentacionNombre}
+      <div className="mt-3 grid grid-cols-2 items-end gap-2.5 sm:gap-3">
+        <label className="block min-w-0">
+          <span className="mb-1 block truncate text-xs font-semibold text-ink-soft">
+            Precio · {ev.presentacionNombre}
           </span>
           <CampoDinero
             value={valorPrecioInput}
@@ -496,8 +496,8 @@ function ItemVentaEditor({
             className={errorPrecio ? 'input-error' : ''}
           />
         </label>
-        <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-ink-soft">Total cobrado</span>
+        <label className="block min-w-0">
+          <span className="mb-1 block truncate text-xs font-semibold text-ink-soft">Total cobrado</span>
           <CampoDinero
             value={valorTotalInput}
             placeholder="0"
@@ -612,6 +612,8 @@ export function RegistrarVentasSheet({
   );
 
   const totalGeneral = evaluadas.reduce((s, e) => s + e.totalVenta, 0);
+  const gananciaGeneral = evaluadas.reduce((s, e) => s + e.gananciaNeta, 0);
+  const tieneIncompleto = evaluadas.some((e) => e.costoIncompleto);
   const hayErrores =
     lineas.length === 0 ||
     evaluadas.some((e) => !e.productoNombre || e.cantidad <= 0 || !e.tienePrecioIngresado);
@@ -649,14 +651,22 @@ export function RegistrarVentasSheet({
       pie={
         <div>
           {lineas.length > 0 && (
-            <div className="num mb-3 flex items-baseline justify-between text-sm">
+            <div className="num mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-sm">
               <span className="text-ink-soft">
                 {lineas.length} {lineas.length === 1 ? 'producto' : 'productos'} ·{' '}
                 {formatearFechaVenta(fecha).texto}
               </span>
-              <span className="font-display text-lg font-bold text-ink">
-                Total {formatearMoneda(totalGeneral)}
-              </span>
+              <div className="flex items-baseline gap-2.5">
+                {!tieneIncompleto && totalGeneral > 0 && (
+                  <span className={`text-xs font-bold ${gananciaGeneral >= 0 ? 'text-ok' : 'text-bad'}`}>
+                    {gananciaGeneral >= 0 ? 'Ganas ' : 'Pierdes '}
+                    {formatearMoneda(Math.abs(gananciaGeneral))}
+                  </span>
+                )}
+                <span className="font-display text-lg font-bold text-ink">
+                  Total {formatearMoneda(totalGeneral)}
+                </span>
+              </div>
             </div>
           )}
           <div className="flex items-center gap-3">
@@ -694,7 +704,7 @@ export function RegistrarVentasSheet({
               + Otro producto libre
             </button>
           </div>
-          {recetas.length > 6 && (
+          {recetas.length > 4 && (
             <input
               type="search"
               placeholder="Filtrar producto…"
@@ -713,7 +723,7 @@ export function RegistrarVentasSheet({
                   key={r.id}
                   type="button"
                   onClick={() => tocarProducto(r)}
-                  className={`inline-flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-sm font-semibold transition-all active:scale-[0.97] ${
+                  className={`inline-flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-left text-sm font-semibold transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.97] ${
                     enLista > 0
                       ? 'border-berry/40 bg-berry-soft text-berry-dark'
                       : 'border-line-strong bg-surface text-ink hover:bg-sunken'
@@ -1099,24 +1109,25 @@ export default function VentasView({
   return (
     <div className="anim-rise space-y-6">
       <EncabezadoVista
+        etiqueta="Mostrador y caja"
         titulo="Ventas diarias"
         ayuda="Anota todo lo que vendes cada día, cambia la fecha cuando quieras y revisa cuánto entra."
       >
-        <button type="button" className="btn btn-primary" onClick={() => onNuevaVenta(fechaVista)}>
+        <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={() => onNuevaVenta(fechaVista)}>
           <Plus size={18} weight="bold" />
           Anotar venta
         </button>
       </EncabezadoVista>
 
       {/* Tarjetas de resumen rápidas */}
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+      <dl className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
         <button
           type="button"
           onClick={() => {
             setFechaVista(hoy);
             setPestana('dia');
           }}
-          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+          className="card-atelier card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
         >
           <div className="min-w-0">
             <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
@@ -1125,7 +1136,7 @@ export default function VentasView({
               </span>
               Vendido hoy
             </dt>
-            <dd className="num font-display mt-2 text-2xl font-semibold sm:text-[1.875rem]">
+            <dd className="num font-display mt-2 text-2xl font-bold sm:text-[1.875rem]">
               {formatearMoneda(resumenHoy.totalVendido)}
             </dd>
             <div className="mt-1 truncate text-xs text-ink-soft">
@@ -1151,22 +1162,28 @@ export default function VentasView({
             setVerTodosMeses(false);
             setPestana('historial');
           }}
-          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 border-ok/20 bg-ok-soft/45 p-4 text-left sm:p-5"
         >
           <div className="min-w-0">
             <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ok-soft text-ok">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ok-soft text-ok ring-1 ring-inset ring-ok/15">
                 <TrendUp size={16} weight="duotone" />
               </span>
               <span className="first-letter:uppercase">{formatearMesAnio(mesActual)}</span>
             </dt>
-            <dd className="num font-display mt-2 text-2xl font-semibold text-ok sm:text-[1.875rem]">
+            <dd className="num font-display mt-2 text-2xl font-bold text-ok sm:text-[1.875rem]">
               {formatearMoneda(resumenMesActual.totalVendido)}
             </dd>
-            <div className="mt-1 text-xs text-ink-soft">
+            <div className="mt-1 truncate text-xs text-ink-soft">
               {resumenMesActual.cantidadRegistros === 0
                 ? 'Sin ventas en este mes'
-                : `${resumenMesActual.cantidadRegistros} ${resumenMesActual.cantidadRegistros === 1 ? 'venta anotada' : 'ventas anotadas'}`}
+                : `${resumenMesActual.cantidadRegistros} ${
+                    resumenMesActual.cantidadRegistros === 1 ? 'venta' : 'ventas'
+                  }${
+                    resumenMesActual.gananciaConocida > 0
+                      ? ` · ganancia ${formatearMoneda(resumenMesActual.gananciaConocida)}`
+                      : ''
+                  }`}
             </div>
           </div>
           <CaretRight
@@ -1202,19 +1219,19 @@ export default function VentasView({
 
           {/* ============================= POR DÍA ============================= */}
           {pestana === 'dia' && (
-            <div className="space-y-5">
-              {/* Barra de fecha editable y atajos */}
-              <div className="card space-y-3 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    aria-label="Día anterior"
-                    onClick={() => setFechaVista((f) => sumarDiasISO(f, -1))}
-                    className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken"
-                  >
-                    <CaretLeft size={18} weight="bold" />
-                  </button>
-                  <div className="relative min-w-[165px] flex-1 sm:max-w-[220px]">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
+              {/* Columna izquierda: navegador de fecha + resumen del día */}
+              <div className="min-w-0 space-y-4 lg:sticky lg:top-24 lg:col-span-5">
+                <div className="card space-y-3 p-4">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label="Día anterior"
+                      onClick={() => setFechaVista((f) => sumarDiasISO(f, -1))}
+                      className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken active:scale-95"
+                    >
+                      <CaretLeft size={18} weight="bold" />
+                    </button>
                     <input
                       type="date"
                       aria-label="Seleccionar fecha"
@@ -1222,24 +1239,24 @@ export default function VentasView({
                       onChange={(e) => {
                         if (e.target.value) setFechaVista(e.target.value);
                       }}
-                      className="input font-semibold"
+                      className="input min-w-0 flex-1 font-semibold"
                     />
+                    <button
+                      type="button"
+                      aria-label="Día siguiente"
+                      onClick={() => setFechaVista((f) => sumarDiasISO(f, 1))}
+                      className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken active:scale-95"
+                    >
+                      <CaretRight size={18} weight="bold" />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    aria-label="Día siguiente"
-                    onClick={() => setFechaVista((f) => sumarDiasISO(f, 1))}
-                    className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken"
-                  >
-                    <CaretRight size={18} weight="bold" />
-                  </button>
 
-                  <div className="flex flex-wrap gap-1.5 sm:ml-auto">
+                  <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-0.5">
                     <button
                       type="button"
                       aria-pressed={fechaVista === hoy}
                       onClick={() => setFechaVista(hoy)}
-                      className={`btn btn-sm ${
+                      className={`btn btn-sm shrink-0 ${
                         fechaVista === hoy ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
                       }`}
                     >
@@ -1249,7 +1266,7 @@ export default function VentasView({
                       type="button"
                       aria-pressed={fechaVista === ayer}
                       onClick={() => setFechaVista(ayer)}
-                      className={`btn btn-sm ${
+                      className={`btn btn-sm shrink-0 ${
                         fechaVista === ayer ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
                       }`}
                     >
@@ -1261,7 +1278,7 @@ export default function VentasView({
                         type="button"
                         aria-pressed={fechaVista === f}
                         onClick={() => setFechaVista(f)}
-                        className={`btn btn-sm ${
+                        className={`btn btn-sm shrink-0 ${
                           fechaVista === f ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
                         }`}
                       >
@@ -1270,127 +1287,151 @@ export default function VentasView({
                     ))}
                   </div>
                 </div>
+
+                {/* Resumen del día seleccionado */}
+                <section className="card-atelier overflow-hidden p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(infoDia.esHoy || infoDia.esAyer) && (
+                      <Etiqueta tono={infoDia.esHoy ? 'berry' : 'neutro'}>{infoDia.texto}</Etiqueta>
+                    )}
+                    <h2 className="font-display text-lg font-bold first-letter:uppercase">
+                      {infoDia.larga}
+                    </h2>
+                  </div>
+
+                  {resumenDia.cantidadRegistros > 0 ? (
+                    <>
+                      <div className="mt-3 flex flex-wrap items-baseline gap-3">
+                        <span className="num font-display text-3xl font-bold leading-none">
+                          {formatearMoneda(resumenDia.totalVendido)}
+                        </span>
+                        {!resumenDia.tieneCostoIncompleto && (
+                          <Etiqueta tono={resumenDia.gananciaConocida >= 0 ? 'ok' : 'bad'}>
+                            {resumenDia.gananciaConocida >= 0 ? 'Ganas ' : 'Pierdes '}
+                            <span className="num">
+                              {formatearMoneda(Math.abs(resumenDia.gananciaConocida))}
+                            </span>
+                          </Etiqueta>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs font-medium text-ink-soft">
+                        {resumenDia.cantidadRegistros}{' '}
+                        {resumenDia.cantidadRegistros === 1 ? 'registro' : 'registros'} en este día
+                      </p>
+
+                      <div className="mt-4 border-t border-line pt-3">
+                        <div className="eyebrow text-ink-soft">Resumen del día</div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {resumenDia.productos.map((p) => (
+                            <div
+                              key={p.clave}
+                              className="inline-flex items-baseline gap-1.5 rounded-xl border border-line bg-surface px-2.5 py-1 text-xs"
+                            >
+                              <span className="num font-bold text-berry-dark">
+                                {formatearCantidadNumero(p.cantidad)} × {p.presentacionNombre}
+                              </span>
+                              <span className="font-medium text-ink">{p.productoNombre}</span>
+                              <span className="num text-ink-soft">
+                                {formatearMoneda(p.totalVenta)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={copiarResumenDia}
+                          className="btn btn-secondary btn-sm flex-1"
+                        >
+                          {copiadoDia ? <Check size={16} weight="bold" /> : <Copy size={16} />}
+                          {copiadoDia ? 'Copiado' : 'Copiar día'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onNuevaVenta(fechaVista)}
+                          className="btn btn-primary btn-sm flex-1"
+                        >
+                          <Plus size={16} weight="bold" />
+                          Agregar
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-2 text-sm text-ink-soft">
+                      Sin ventas registradas en esta fecha.
+                    </p>
+                  )}
+                </section>
               </div>
 
-              {/* Encabezado y detalle del día seleccionado */}
-              <section className="card overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line p-4 sm:p-5">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      {(infoDia.esHoy || infoDia.esAyer) && (
-                        <Etiqueta tono={infoDia.esHoy ? 'berry' : 'neutro'}>{infoDia.texto}</Etiqueta>
-                      )}
-                      <h2 className="font-display text-xl font-semibold first-letter:uppercase">
-                        {infoDia.larga}
-                      </h2>
-                    </div>
-                    <p className="mt-1 text-sm text-ink-soft">
-                      {resumenDia.cantidadRegistros === 0
-                        ? 'Sin ventas registradas en esta fecha.'
-                        : `${resumenDia.cantidadRegistros} ${resumenDia.cantidadRegistros === 1 ? 'registro' : 'registros'} · Total vendido ${formatearMoneda(resumenDia.totalVendido)}`}
-                      {resumenDia.cantidadRegistros > 0 &&
-                        !resumenDia.tieneCostoIncompleto &&
-                        ` · Ganancia ${formatearMoneda(resumenDia.gananciaConocida)}`}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {resumenDia.cantidadRegistros > 0 && (
-                      <button
-                        type="button"
-                        onClick={copiarResumenDia}
-                        className="btn btn-secondary btn-sm"
-                      >
-                        {copiadoDia ? <Check size={16} weight="bold" /> : <Copy size={16} />}
-                        {copiadoDia ? 'Copiado' : 'Copiar día'}
-                      </button>
-                    )}
+              {/* Columna derecha: registros individuales y pedidos entregados */}
+              <div className="min-w-0 space-y-4 lg:col-span-7">
+                <section className="card overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5">
+                    <h3 className="font-display text-base font-bold">Movimientos del día</h3>
                     <button
                       type="button"
                       onClick={() => onNuevaVenta(fechaVista)}
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-ghost btn-sm"
                     >
-                      <Plus size={16} weight="bold" />
+                      <Plus size={15} weight="bold" />
                       Agregar a este día
                     </button>
                   </div>
-                </div>
 
-                {resumenDia.cantidadRegistros === 0 ? (
-                  <div className="px-5 py-10 text-center">
-                    <CalendarBlank size={28} weight="duotone" className="mx-auto text-ink-soft" />
-                    <p className="mt-2 text-[0.9375rem] text-ink-soft">
-                      No hay ventas anotadas para esta fecha.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => onNuevaVenta(fechaVista)}
-                      className="btn btn-secondary mt-4"
-                    >
-                      <Plus size={18} weight="bold" />
-                      Anotar ventas del {infoDia.esHoy ? 'día' : infoDia.corta}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {/* Resumen agrupado por producto */}
-                    <div className="border-b border-line bg-paper/55 px-4 py-3.5 sm:px-5">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
-                        Resumen del día
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {resumenDia.productos.map((p) => (
-                          <div
-                            key={p.clave}
-                            className="inline-flex items-baseline gap-2 rounded-xl border border-line bg-surface px-3 py-1.5 text-sm"
-                          >
-                            <span className="num font-bold text-berry-dark">
-                              {formatearCantidadNumero(p.cantidad)} × {p.presentacionNombre}
-                            </span>
-                            <span className="font-medium text-ink">{p.productoNombre}</span>
-                            <span className="num text-ink-soft">
-                              {formatearMoneda(p.totalVenta)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                  {resumenDia.cantidadRegistros === 0 ? (
+                    <div className="px-5 py-12 text-center">
+                      <CalendarBlank size={30} weight="duotone" className="mx-auto text-ink-soft" />
+                      <p className="mt-2 text-[0.9375rem] text-ink-soft">
+                        No hay ventas anotadas para esta fecha.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => onNuevaVenta(fechaVista)}
+                        className="btn btn-secondary mt-4"
+                      >
+                        <Plus size={18} weight="bold" />
+                        Anotar ventas del {infoDia.esHoy ? 'día' : infoDia.corta}
+                      </button>
                     </div>
-
-                    {/* Registros individuales (editables) */}
+                  ) : (
                     <div className="divide-y divide-line">
                       {ventasDelDia.map((v) => (
                         <TarjetaVenta key={v.id} venta={v} onEditar={onEditarVenta} />
                       ))}
                     </div>
-                  </>
-                )}
-              </section>
-
-              {pedidosEntregadosDia.length > 0 && (
-                <section className="card p-4 sm:p-5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h3 className="text-base font-bold">Pedidos entregados este día</h3>
-                    <span className="num text-sm font-bold text-ok">
-                      {formatearMoneda(
-                        pedidosEntregadosDia.reduce((s, p) => s + p.precio_venta_total, 0)
-                      )}
-                    </span>
-                  </div>
-                  <ul className="mt-2 divide-y divide-line">
-                    {pedidosEntregadosDia.map((p) => (
-                      <li key={p.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
-                        <span className="min-w-0 truncate">
-                          <strong>{p.cliente_nombre}</strong> ·{' '}
-                          <span className="num">{p.unidades_totales}</span> ×{' '}
-                          {p.receta_nombre_snapshot}
-                        </span>
-                        <span className="num shrink-0 font-semibold">
-                          {formatearMoneda(p.precio_venta_total)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  )}
                 </section>
-              )}
+
+                {pedidosEntregadosDia.length > 0 && (
+                  <section className="card-sunken p-4 sm:p-5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 className="font-display text-base font-bold">Pedidos entregados este día</h3>
+                      <span className="num text-sm font-bold text-ok">
+                        {formatearMoneda(
+                          pedidosEntregadosDia.reduce((s, p) => s + p.precio_venta_total, 0)
+                        )}
+                      </span>
+                    </div>
+                    <ul className="mt-2 divide-y divide-line">
+                      {pedidosEntregadosDia.map((p) => (
+                        <li key={p.id} className="flex items-baseline justify-between gap-3 py-2 text-sm">
+                          <span className="min-w-0 truncate">
+                            <strong>{p.cliente_nombre}</strong> ·{' '}
+                            <span className="num">{p.unidades_totales}</span> ×{' '}
+                            {p.receta_nombre_snapshot}
+                          </span>
+                          <span className="num shrink-0 font-semibold">
+                            {formatearMoneda(p.precio_venta_total)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
             </div>
           )}
 
@@ -1398,17 +1439,17 @@ export default function VentasView({
           {pestana === 'historial' && (
             <div className="space-y-6">
               <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
-                <div className="flex items-center gap-2">
+                <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
                   <button
                     type="button"
                     disabled={verTodosMeses}
                     aria-label="Mes anterior"
                     onClick={() => setMesVista((m) => sumarMesISO(m, -1))}
-                    className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken disabled:opacity-40"
+                    className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken disabled:opacity-40"
                   >
                     <CaretLeft size={18} weight="bold" />
                   </button>
-                  <span className="font-display min-w-[155px] text-center text-lg font-semibold first-letter:uppercase">
+                  <span className="font-display min-w-[140px] text-center text-lg font-bold first-letter:uppercase">
                     {verTodosMeses ? 'Todo el historial' : formatearMesAnio(mesVista)}
                   </span>
                   <button
@@ -1416,13 +1457,13 @@ export default function VentasView({
                     disabled={verTodosMeses}
                     aria-label="Mes siguiente"
                     onClick={() => setMesVista((m) => sumarMesISO(m, 1))}
-                    className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken disabled:opacity-40"
+                    className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line-strong bg-surface text-ink hover:bg-sunken disabled:opacity-40"
                   >
                     <CaretRight size={18} weight="bold" />
                   </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex w-full gap-2 sm:w-auto">
                   <button
                     type="button"
                     aria-pressed={!verTodosMeses && mesVista === mesActual}
@@ -1430,7 +1471,7 @@ export default function VentasView({
                       setVerTodosMeses(false);
                       setMesVista(mesActual);
                     }}
-                    className={`btn btn-sm ${
+                    className={`btn btn-sm flex-1 sm:flex-initial ${
                       !verTodosMeses && mesVista === mesActual
                         ? 'bg-berry-soft text-berry-dark'
                         : 'btn-secondary'
@@ -1442,7 +1483,7 @@ export default function VentasView({
                     type="button"
                     aria-pressed={verTodosMeses}
                     onClick={() => setVerTodosMeses((v) => !v)}
-                    className={`btn btn-sm ${
+                    className={`btn btn-sm flex-1 sm:flex-initial ${
                       verTodosMeses ? 'bg-berry-soft text-berry-dark' : 'btn-secondary'
                     }`}
                   >
@@ -1452,23 +1493,23 @@ export default function VentasView({
               </div>
 
               {diasAgrupados.length === 0 ? (
-                <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+                <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
                   No hay ventas diarias registradas en {formatearMesAnio(mesVista)}.
                 </p>
               ) : (
                 <>
                   {/* Totales del período */}
-                  <div className="card p-5">
+                  <div className="card-atelier p-5 sm:p-6">
                     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                       <div>
                         <dt className="text-sm text-ink-soft">Ventas diarias</dt>
-                        <dd className="num font-display mt-1 text-2xl font-semibold">
+                        <dd className="num font-display mt-1 text-2xl font-bold">
                           {formatearMoneda(resumenPeriodo.totalVendido)}
                         </dd>
                       </div>
                       <div>
                         <dt className="text-sm text-ink-soft">Días con ventas</dt>
-                        <dd className="num font-display mt-1 text-2xl font-semibold">
+                        <dd className="num font-display mt-1 text-2xl font-bold">
                           {diasAgrupados.length}
                         </dd>
                       </div>
@@ -1478,7 +1519,7 @@ export default function VentasView({
                             ? 'Total c/ pedidos entregados'
                             : 'Promedio por día'}
                         </dt>
-                        <dd className="num font-display mt-1 text-2xl font-semibold text-ok">
+                        <dd className="num font-display mt-1 text-2xl font-bold text-ok">
                           {totalPedidosPeriodo > 0
                             ? formatearMoneda(resumenPeriodo.totalVendido + totalPedidosPeriodo)
                             : formatearMoneda(
@@ -1489,15 +1530,15 @@ export default function VentasView({
                     </dl>
 
                     {resumenPeriodo.productos.length > 0 && (
-                      <div className="mt-4 border-t border-line pt-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                      <div className="mt-5 border-t border-line pt-4">
+                        <div className="eyebrow text-ink-soft">
                           Lo más vendido en este período
                         </div>
-                        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <ul className="mt-2.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                           {resumenPeriodo.productos.slice(0, 6).map((p) => (
                             <li
                               key={p.clave}
-                              className="flex items-baseline justify-between gap-2 rounded-xl bg-paper px-3 py-2 text-sm"
+                              className="flex items-baseline justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm"
                             >
                               <span className="min-w-0 truncate">
                                 <strong className="num text-berry-dark">
@@ -1516,38 +1557,43 @@ export default function VentasView({
                   </div>
 
                   {/* Lista día por día */}
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
                     {diasAgrupados.map((dia) => (
-                      <article key={dia.fecha} className="card card-interactive p-4 sm:p-5">
-                        <div className="flex flex-wrap items-baseline justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {(dia.info.esHoy || dia.info.esAyer) && (
-                              <Etiqueta tono={dia.info.esHoy ? 'berry' : 'neutro'}>
-                                {dia.info.texto}
-                              </Etiqueta>
-                            )}
-                            <h3 className="font-display text-lg font-semibold first-letter:uppercase">
-                              {dia.info.larga}
-                            </h3>
+                      <article
+                        key={dia.fecha}
+                        className="card card-interactive flex min-w-0 flex-col justify-between p-4 sm:p-5"
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-baseline justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {(dia.info.esHoy || dia.info.esAyer) && (
+                                <Etiqueta tono={dia.info.esHoy ? 'berry' : 'neutro'}>
+                                  {dia.info.texto}
+                                </Etiqueta>
+                              )}
+                              <h3 className="font-display text-lg font-bold first-letter:uppercase">
+                                {dia.info.larga}
+                              </h3>
+                            </div>
+                            <div className="num font-display text-xl font-bold text-ink">
+                              {formatearMoneda(dia.resumen.totalVendido)}
+                            </div>
                           </div>
-                          <div className="num font-display text-xl font-semibold text-ink">
-                            {formatearMoneda(dia.resumen.totalVendido)}
+
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {dia.resumen.productos.map((p) => (
+                              <span
+                                key={p.clave}
+                                className="num rounded-lg bg-sunken px-2.5 py-1 text-xs font-medium text-ink"
+                              >
+                                {formatearCantidadNumero(p.cantidad)} × {p.presentacionNombre} ·{' '}
+                                {p.productoNombre}
+                              </span>
+                            ))}
                           </div>
                         </div>
 
-                        <div className="mt-2.5 flex flex-wrap gap-1.5">
-                          {dia.resumen.productos.map((p) => (
-                            <span
-                              key={p.clave}
-                              className="num rounded-lg bg-sunken px-2.5 py-1 text-xs font-medium text-ink"
-                            >
-                              {formatearCantidadNumero(p.cantidad)} × {p.presentacionNombre} ·{' '}
-                              {p.productoNombre}
-                            </span>
-                          ))}
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2 border-t border-line pt-3">
+                        <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-3">
                           <button
                             type="button"
                             onClick={() => {

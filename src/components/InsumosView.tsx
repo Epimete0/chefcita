@@ -195,14 +195,14 @@ export function InsumoFormSheet({
               placeholder={esEnvase ? '10' : '500'}
               value={cantidad}
               onChange={(e) => setCantidad(e.target.value)}
-              className={`input num w-28 font-semibold ${
+              className={`input num w-24 shrink-0 font-semibold sm:w-28 ${
                 intentoGuardar && errores.cantidad ? 'input-error' : ''
               }`}
             />
             <select
               value={unidad}
               onChange={(e) => setUnidad(e.target.value as UnidadMedida)}
-              className="input flex-1"
+              className="input min-w-0 flex-1"
               aria-label="Unidad"
             >
               {UNIDADES.map((u) => (
@@ -229,7 +229,13 @@ export function InsumoFormSheet({
           </p>
         )}
 
-        <details className="group rounded-xl border border-line">
+        <details
+          className="group rounded-xl border border-line"
+          open={Boolean(
+            insumoInicial &&
+              (insumoInicial.stock_actual > 0 || insumoInicial.proveedor || insumoInicial.notas)
+          )}
+        >
           <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between px-4 text-[0.9375rem] font-semibold [&::-webkit-details-marker]:hidden">
             Más detalles (opcional)
             <CaretRight size={16} weight="bold" className="transition-transform group-open:rotate-90" />
@@ -290,7 +296,7 @@ export default function InsumosView({
   onNuevo: (tipo: TipoInsumo) => void;
   onEditar: (insumo: Insumo) => void;
 }) {
-  const [filtro, setFiltro] = useState<'todos' | TipoInsumo>('todos');
+  const [filtro, setFiltro] = useState<'todos' | TipoInsumo | 'sin_precio'>('todos');
   const [busqueda, setBusqueda] = useState('');
 
   const usos = useMemo(() => {
@@ -304,11 +310,15 @@ export default function InsumosView({
 
   const cuentaIngredientes = insumos.filter((i) => i.tipo === 'ingrediente').length;
   const cuentaEnvases = insumos.length - cuentaIngredientes;
+  const cuentaSinPrecio = insumos.filter((i) => (Number(i.precio_compra) || 0) <= 0).length;
 
   const visibles = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return insumos
-      .filter((i) => filtro === 'todos' || i.tipo === filtro)
+      .filter((i) => {
+        if (filtro === 'sin_precio') return (Number(i.precio_compra) || 0) <= 0;
+        return filtro === 'todos' || i.tipo === filtro;
+      })
       .filter((i) => !q || i.nombre.toLowerCase().includes(q))
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [insumos, filtro, busqueda]);
@@ -316,20 +326,21 @@ export default function InsumosView({
   return (
     <div className="anim-rise space-y-6">
       <EncabezadoVista
+        etiqueta="Despensa y costos"
         titulo="Ingredientes y envases"
         ayuda="Todo lo que compras para tus dulces. Si un precio sube, cámbialo aquí y el costo de tus productos se actualiza solo."
       >
         {insumos.length > 0 && (
-          <>
-            <button type="button" className="btn btn-secondary" onClick={() => onNuevo('empaque')}>
+          <div className="flex w-full gap-2.5 sm:w-auto sm:gap-3">
+            <button type="button" className="btn btn-secondary flex-1 sm:flex-initial" onClick={() => onNuevo('empaque')}>
               <Plus size={18} weight="bold" />
               Envase
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => onNuevo('ingrediente')}>
+            <button type="button" className="btn btn-primary flex-1 sm:flex-initial" onClick={() => onNuevo('ingrediente')}>
               <Plus size={18} weight="bold" />
               Ingrediente
             </button>
-          </>
+          </div>
         )}
       </EncabezadoVista>
 
@@ -352,16 +363,19 @@ export default function InsumosView({
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Segmentos
-              className="sm:w-[26rem]"
+              className={cuentaSinPrecio > 0 ? 'sm:w-[33rem]' : 'sm:w-[26rem]'}
               opciones={[
                 { id: 'todos', etiqueta: 'Todos', cuenta: insumos.length },
                 { id: 'ingrediente', etiqueta: 'Ingredientes', cuenta: cuentaIngredientes },
                 { id: 'empaque', etiqueta: 'Envases', cuenta: cuentaEnvases },
+                ...(cuentaSinPrecio > 0
+                  ? [{ id: 'sin_precio' as const, etiqueta: 'Sin precio', cuenta: cuentaSinPrecio }]
+                  : []),
               ]}
               valor={filtro}
               onChange={setFiltro}
             />
-            {insumos.length > 6 && (
+            {insumos.length > 4 && (
               <div className="relative sm:ml-auto sm:w-64">
                 <MagnifyingGlass
                   size={18}
@@ -369,7 +383,7 @@ export default function InsumosView({
                 />
                 <input
                   type="search"
-                  placeholder="Buscar"
+                  placeholder="Buscar insumo"
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                   className="input pl-10"
@@ -379,55 +393,66 @@ export default function InsumosView({
           </div>
 
           {visibles.length === 0 ? (
-            <p className="card px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
+            <p className="card-sunken px-5 py-8 text-center text-[0.9375rem] text-ink-soft">
               {busqueda
                 ? `No hay nada que coincida con “${busqueda}”.`
                 : filtro === 'empaque'
                   ? 'Aún no agregas envases.'
-                  : 'Aún no agregas ingredientes.'}
+                  : filtro === 'sin_precio'
+                    ? 'Todos tus insumos tienen precio.'
+                    : 'Aún no agregas ingredientes.'}
             </p>
           ) : (
-            <ul className="card divide-y divide-line overflow-hidden">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {visibles.map((ins) => {
                 const sinPrecio = (Number(ins.precio_compra) || 0) <= 0;
                 const costo = obtenerCostoUnitarioInsumo(ins).etiquetaCostoLegible;
                 const enProductos = usos.get(ins.id) || 0;
                 return (
-                  <li key={ins.id}>
-                    <button
-                      type="button"
-                      onClick={() => onEditar(ins)}
-                      className="flex w-full cursor-pointer items-center gap-4 px-4 py-3.5 text-left transition-colors duration-150 hover:bg-paper/80 active:bg-sunken/60 sm:px-5"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold">{ins.nombre}</div>
-                        <div className="mt-0.5 text-sm text-ink-soft">
-                          {ins.tipo === 'empaque' ? 'Envase' : 'Paquete'} de{' '}
+                  <button
+                    key={ins.id}
+                    type="button"
+                    onClick={() => onEditar(ins)}
+                    className="card card-interactive flex min-w-0 w-full cursor-pointer items-center gap-2.5 px-4 py-3.5 text-left sm:gap-3.5 sm:px-5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-bold text-ink">{ins.nombre}</span>
+                        {ins.tipo === 'empaque' && <Etiqueta tono="lila">Envase</Etiqueta>}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-ink-soft sm:text-sm">
+                        <span>
                           {formatearCantidad(ins.cantidad_paquete, ins.unidad)} ·{' '}
                           {sinPrecio ? (
-                            <span className="text-warn">Precio por confirmar</span>
+                            <span className="font-medium text-warn">Precio por confirmar</span>
                           ) : (
                             <span className="num">{formatearMoneda(ins.precio_compra)}</span>
                           )}
-                          {enProductos > 0 && (
-                            <span className="hidden sm:inline">
-                              {' '}
-                              · en {enProductos} {enProductos === 1 ? 'producto' : 'productos'}
-                            </span>
-                          )}
-                        </div>
+                        </span>
+                        {enProductos > 0 && (
+                          <span>
+                            · {enProductos} {enProductos === 1 ? 'receta' : 'recetas'}
+                          </span>
+                        )}
+                        {ins.stock_actual > 0 && (
+                          <span className="num font-medium text-ok">
+                            · En casa: {formatearCantidad(ins.stock_actual, ins.unidad)}
+                          </span>
+                        )}
                       </div>
-                      {sinPrecio ? (
-                        <Etiqueta tono="warn">Falta precio</Etiqueta>
-                      ) : (
-                        <div className="num shrink-0 text-right text-sm font-semibold">{costo}</div>
-                      )}
-                      <CaretRight size={16} weight="bold" className="shrink-0 text-ink-soft" />
-                    </button>
-                  </li>
+                    </div>
+                    {sinPrecio ? (
+                      <Etiqueta tono="warn">Falta precio</Etiqueta>
+                    ) : (
+                      <div className="num max-w-[42%] shrink-0 text-right text-xs font-semibold leading-tight text-berry-dark sm:text-sm">
+                        {costo}
+                      </div>
+                    )}
+                    <CaretRight size={16} weight="bold" className="shrink-0 text-ink-soft" />
+                  </button>
                 );
               })}
-            </ul>
+            </div>
           )}
         </>
       )}

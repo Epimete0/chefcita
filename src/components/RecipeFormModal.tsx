@@ -238,13 +238,13 @@ function EditorItems({
                 placeholder={esEnvase ? '10' : '500'}
                 value={nuevoCantidad}
                 onChange={(e) => setNuevoCantidad(e.target.value)}
-                className="input num w-28 font-semibold"
+                className="input num w-24 shrink-0 font-semibold sm:w-28"
               />
               <select
                 value={nuevoUnidad}
                 aria-label="Unidad"
                 onChange={(e) => setNuevoUnidad(e.target.value as UnidadMedida)}
-                className="input flex-1"
+                className="input min-w-0 flex-1"
               >
                 {UNIDADES.map((u) => (
                   <option key={u} value={u}>
@@ -289,7 +289,9 @@ function EditorItems({
               {disponibles.map((ins) => (
                 <option key={ins.id} value={ins.id}>
                   {ins.nombre}
-                  {Number(ins.precio_compra) <= 0 ? ' (falta precio)' : ''}
+                  {Number(ins.precio_compra) <= 0
+                    ? ' (falta precio)'
+                    : ` · ${formatearMoneda(ins.precio_compra)} / ${ins.cantidad_paquete}${ins.unidad}`}
                 </option>
               ))}
             </select>
@@ -553,30 +555,35 @@ export default function RecipeFormModal({
       ancho="lg"
       alta
       subtitulo={
-        <div>
-          <div className="flex gap-1.5" role="tablist" aria-label="Pasos">
-            {PASOS_ASISTENTE.map((etiqueta, i) => (
-              <button
-                key={etiqueta}
-                type="button"
-                role="tab"
-                aria-selected={i === paso}
-                aria-label={`Paso ${i + 1}: ${etiqueta}`}
-                onClick={() => irA(i)}
-                className="group flex-1 cursor-pointer py-1.5"
-              >
-                <span
-                  className={`block h-1.5 rounded-full transition-colors ${
-                    i <= paso ? 'bg-berry' : 'bg-line group-hover:bg-line-strong'
+        <div className="mt-1">
+          <div className="no-scrollbar flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label="Pasos">
+            {PASOS_ASISTENTE.map((etiqueta, i) => {
+              const activo = i === paso;
+              const completado = i < paso;
+              return (
+                <button
+                  key={etiqueta}
+                  type="button"
+                  role="tab"
+                  aria-selected={activo}
+                  onClick={() => irA(i)}
+                  className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    activo
+                      ? 'bg-brand text-white shadow-[0_2px_6px_rgba(141,83,107,0.28)]'
+                      : completado
+                        ? 'bg-berry-soft text-berry-dark hover:bg-berry/15'
+                        : 'bg-sunken text-ink-soft hover:text-ink'
                   }`}
-                />
-              </button>
-            ))}
+                >
+                  <span className="num">{i + 1}.</span>
+                  <span>{etiqueta}</span>
+                </button>
+              );
+            })}
           </div>
-          <div className="mt-1">
-            Paso {paso + 1} de {PASOS_ASISTENTE.length} ·{' '}
-            <strong className="text-ink">{PASOS_ASISTENTE[paso]}</strong>
-            {esUltimo && ' (opcional)'}
+          <div className="mt-1 text-xs text-ink-soft">
+            Paso {paso + 1} de {PASOS_ASISTENTE.length}
+            {esUltimo && ' · opcional'}
           </div>
         </div>
       }
