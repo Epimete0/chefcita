@@ -370,7 +370,7 @@ export default function RecipeDetailView({
             <div className="card p-5">
               <h2 className="text-lg font-bold">Cambiar el precio</h2>
               <p className="mt-0.5 text-sm text-ink-soft">
-                Prueba un precio y mira arriba cuánto ganarías. No se guarda hasta que lo confirmes.
+                Simula un precio arriba antes de guardarlo.
               </p>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <div className="sm:w-48">

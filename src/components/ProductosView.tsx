@@ -51,11 +51,7 @@ export default function ProductosView({
 
   return (
     <div className="anim-rise space-y-6">
-      <EncabezadoVista
-        etiqueta="Catálogo y márgenes"
-        titulo="Productos"
-        ayuda="Lo que vendes. Para cada uno te mostramos cuánto te cuesta hacerlo, a cuánto lo vendes y cuánto te queda."
-      >
+      <EncabezadoVista titulo="Productos">
         {recetas.length > 0 && (
           <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={onNuevo}>
             <Plus size={18} weight="bold" />

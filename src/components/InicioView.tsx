@@ -328,22 +328,14 @@ export default function InicioView(props: InicioViewProps) {
             )}
           </div>
         </div>
-        <div className="flex w-full gap-2.5 sm:w-auto sm:gap-3">
+        <div className="flex w-full sm:w-auto">
           <button
             type="button"
-            className="btn btn-secondary flex-1 whitespace-nowrap px-3 text-sm sm:flex-initial sm:px-[1.125rem] sm:text-[0.9375rem]"
+            className="btn btn-secondary w-full whitespace-nowrap sm:w-auto"
             onClick={onNuevoPedido}
           >
             <Plus size={17} weight="bold" />
             Nuevo pedido
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary flex-1 whitespace-nowrap px-3 text-sm sm:flex-initial sm:px-[1.125rem] sm:text-[0.9375rem]"
-            onClick={() => onNuevaVenta(hoyIso)}
-          >
-            <Plus size={17} weight="bold" />
-            Anotar venta
           </button>
         </div>
       </header>
@@ -378,17 +370,20 @@ export default function InicioView(props: InicioViewProps) {
             </div>
 
             {ventasHoy.length === 0 ? (
-              <div className="px-5 py-6 sm:px-6">
-                <p className="max-w-[52ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-                  Anota lo que vendes en el día (por ejemplo: 3 cajas de donas, 2 mini pies) y
-                  edita la fecha si quieres cargar ventas de otro día.
+              <div className="px-5 py-5 sm:px-6">
+                <p className="text-[0.9375rem] text-ink-soft">
+                  Todavía no registras ventas hoy.
+                  {resumenAyer.cantidadRegistros > 0 && (
+                    <>
+                      {' '}
+                      Ayer vendiste{' '}
+                      <strong className="num text-ink">
+                        {formatearMoneda(resumenAyer.totalVendido)}
+                      </strong>
+                      .
+                    </>
+                  )}
                 </p>
-                {resumenAyer.cantidadRegistros > 0 && (
-                  <p className="mt-2.5 text-sm text-ink-soft">
-                    Ayer vendiste{' '}
-                    <strong className="num text-ink">{formatearMoneda(resumenAyer.totalVendido)}</strong>.
-                  </p>
-                )}
               </div>
             ) : (
               <>

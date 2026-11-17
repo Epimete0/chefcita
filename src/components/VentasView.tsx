@@ -1108,16 +1108,7 @@ export default function VentasView({
 
   return (
     <div className="anim-rise space-y-6">
-      <EncabezadoVista
-        etiqueta="Mostrador y caja"
-        titulo="Ventas diarias"
-        ayuda="Anota todo lo que vendes cada día, cambia la fecha cuando quieras y revisa cuánto entra."
-      >
-        <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={() => onNuevaVenta(fechaVista)}>
-          <Plus size={18} weight="bold" />
-          Anotar venta
-        </button>
-      </EncabezadoVista>
+      <EncabezadoVista titulo="Ventas" />
 
       {/* Tarjetas de resumen rápidas */}
       <dl className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4">
@@ -1359,9 +1350,11 @@ export default function VentasView({
                       </div>
                     </>
                   ) : (
-                    <p className="mt-2 text-sm text-ink-soft">
-                      Sin ventas registradas en esta fecha.
-                    </p>
+                    <div className="mt-3">
+                      <span className="num font-display text-3xl font-bold leading-none text-ink-soft">
+                        $0
+                      </span>
+                    </div>
                   )}
                 </section>
               </div>

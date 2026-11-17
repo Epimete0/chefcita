@@ -325,11 +325,7 @@ export default function InsumosView({
 
   return (
     <div className="anim-rise space-y-6">
-      <EncabezadoVista
-        etiqueta="Despensa y costos"
-        titulo="Ingredientes y envases"
-        ayuda="Todo lo que compras para tus dulces. Si un precio sube, cámbialo aquí y el costo de tus productos se actualiza solo."
-      >
+      <EncabezadoVista titulo="Ingredientes y envases">
         {insumos.length > 0 && (
           <div className="flex w-full gap-2.5 sm:w-auto sm:gap-3">
             <button type="button" className="btn btn-secondary flex-1 sm:flex-initial" onClick={() => onNuevo('empaque')}>

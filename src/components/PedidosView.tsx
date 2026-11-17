@@ -552,9 +552,9 @@ function ListaCompras({ lista, pedidosPorPreparar }: { lista: ItemCompra[]; pedi
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-[60ch] text-[0.9375rem] text-ink-soft">
-          Lo que necesitas para {pedidosPorPreparar === 1 ? 'tu pedido' : `tus ${pedidosPorPreparar} pedidos`}{' '}
-          por preparar. Toca cada fila para ir marcando lo que ya echaste al carro.
+        <p className="text-[0.9375rem] text-ink-soft">
+          Para {pedidosPorPreparar === 1 ? '1 pedido' : `${pedidosPorPreparar} pedidos`} por preparar ·
+          toca cada ítem al comprarlo.
         </p>
         <div className="flex flex-wrap gap-2">
           {marcadosCount > 0 && (
@@ -707,11 +707,7 @@ export default function PedidosView({
 
   return (
     <div className="anim-rise space-y-6">
-      <EncabezadoVista
-        etiqueta="Agenda y compras"
-        titulo="Pedidos"
-        ayuda="Lo que tienes que entregar, cuándo, y cuánto te falta cobrar."
-      >
+      <EncabezadoVista titulo="Pedidos">
         {pedidos.length > 0 && (
           <button type="button" className="btn btn-primary w-full sm:w-auto" onClick={onNuevo}>
             <Plus size={18} weight="bold" />
