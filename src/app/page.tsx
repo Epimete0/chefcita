@@ -262,10 +262,10 @@ export default function ChefcitaApp() {
             className="group flex cursor-pointer items-center gap-2.5 rounded-xl py-1 pr-2 transition-transform duration-150 active:scale-[0.98]"
             aria-label="Chefcita, ir al inicio"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-berry text-white shadow-[0_2px_8px_rgba(176,32,63,0.28)] transition-transform duration-200 group-hover:scale-105">
+            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white shadow-[0_2px_8px_rgba(201,36,103,0.28)] transition-transform duration-200 group-hover:scale-105">
               <Cookie size={18} weight="fill" />
             </span>
-            <span className="font-display text-[1.4375rem] font-semibold tracking-tight">
+            <span className="font-display text-brand text-[1.4375rem] font-semibold tracking-tight">
               Chefcita
             </span>
           </button>
@@ -289,7 +289,7 @@ export default function ChefcitaApp() {
                   <Icono size={20} weight={activo ? 'fill' : 'regular'} />
                   {item.etiqueta}
                   {item.id === 'pedidos' && porEntregar > 0 && (
-                    <span className="num rounded-full bg-berry px-1.5 text-xs text-white">
+                    <span className="num rounded-full bg-brand px-1.5 text-xs text-white">
                       {porEntregar}
                     </span>
                   )}
@@ -423,7 +423,7 @@ export default function ChefcitaApp() {
               >
                 <Icono size={21} weight={activo ? 'fill' : 'regular'} />
                 {item.id === 'pedidos' && porEntregar > 0 && (
-                  <span className="num absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-berry px-1 text-center text-[11px] leading-[18px] text-white">
+                  <span className="num absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-brand px-1 text-center text-[11px] leading-[18px] text-white">
                     {porEntregar}
                   </span>
                 )}
@@ -440,7 +440,7 @@ export default function ChefcitaApp() {
       {aviso && (
         <div
           role="status"
-          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-2xl border border-white/10 bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_12px_32px_rgba(42,31,27,0.32)] md:bottom-8"
+          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-2xl border border-white/10 bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_12px_32px_rgba(45,20,32,0.32)] md:bottom-8"
         >
           <CheckCircle size={20} weight="fill" className="shrink-0 text-[#7ddba6]" />
           {aviso}

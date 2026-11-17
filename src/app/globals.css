@@ -5,33 +5,57 @@
   --font-display: var(--font-heading), Georgia, serif;
 }
 
+/*
+ * Paleta "Frambuesa y Orquídea"
+ * - Frambuesa: color de marca (botones, enlaces, foco). Blanco encima: 5.3:1.
+ * - Orquídea: acento secundario y pareja de los degradados.
+ * - Ciruela: tinta del texto, reemplaza al marrón para que todo combine con el rosa.
+ * - Estados (ok / warn / bad) se mantienen verde, ámbar y rojo anaranjado
+ *   para que nunca se confundan con el rosa de la marca.
+ */
 @theme {
-  --color-paper: #fbf7f2;
+  --color-paper: #fff5f8;
   --color-surface: #ffffff;
-  --color-sunken: #f4ece3;
-  --color-ink: #261b18;
-  --color-ink-soft: #68574f;
-  --color-line: #e8ddd1;
-  --color-line-strong: #d0c0b0;
-  --color-berry: #a82848;
-  --color-berry-dark: #871c37;
-  --color-berry-soft: #faeaee;
-  --color-caramel: #b86f28;
-  --color-caramel-soft: #fcf1e3;
-  --color-ok: #1d7047;
-  --color-ok-soft: #e5f3eb;
-  --color-warn: #8f5300;
-  --color-warn-soft: #fdf0d8;
-  --color-bad: #b32920;
-  --color-bad-soft: #fdebe9;
+  --color-sunken: #fbe8f0;
+  --color-ink: #2d1420;
+  --color-ink-soft: #7d5163;
+  --color-line: #f4dbe5;
+  --color-line-strong: #e6bfcf;
+  --color-berry: #c92467;
+  --color-berry-dark: #a3174f;
+  --color-berry-soft: #fde6ef;
+  --color-orchid: #8e2f93;
+  --color-orchid-soft: #f7e9fa;
+  --color-ok: #1f7a52;
+  --color-ok-soft: #e3f4ec;
+  --color-warn: #935200;
+  --color-warn-soft: #fdf0dc;
+  --color-bad: #c0331f;
+  --color-bad-soft: #fdece8;
 }
 
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --shadow-card: 0 1px 2px rgba(38, 27, 24, 0.04), 0 4px 14px rgba(38, 27, 24, 0.035);
-  --shadow-card-hover: 0 2px 8px rgba(38, 27, 24, 0.07), 0 12px 26px rgba(38, 27, 24, 0.06);
-  --shadow-float: 0 10px 30px rgba(38, 27, 24, 0.16), 0 2px 8px rgba(38, 27, 24, 0.08);
+  --gradient-brand: linear-gradient(135deg, #d1306f 0%, #c92467 45%, #a8297f 100%);
+  --gradient-brand-hover: linear-gradient(135deg, #b81f5e 0%, #a3174f 45%, #8e2f93 100%);
+  --shadow-card: 0 1px 2px rgba(45, 20, 32, 0.04), 0 4px 14px rgba(201, 36, 103, 0.045);
+  --shadow-card-hover: 0 2px 8px rgba(45, 20, 32, 0.06), 0 12px 26px rgba(201, 36, 103, 0.08);
+  --shadow-float: 0 10px 30px rgba(45, 20, 32, 0.16), 0 2px 8px rgba(45, 20, 32, 0.08);
+}
+
+/* Relleno con el degradado de marca (logo, insignias, paso actual) */
+@utility bg-brand {
+  background-image: var(--gradient-brand);
+  background-color: var(--color-berry);
+}
+
+/* Texto con el degradado de marca (solo para titulares grandes) */
+@utility text-brand {
+  background-image: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 html {
@@ -44,8 +68,9 @@ body {
   position: relative;
   background-color: var(--color-paper);
   background-image:
-    radial-gradient(ellipse 75% 42% at 15% -8%, rgba(168, 40, 72, 0.055), transparent 68%),
-    radial-gradient(ellipse 65% 38% at 88% -6%, rgba(184, 111, 40, 0.05), transparent 65%);
+    radial-gradient(ellipse 75% 42% at 12% -8%, rgba(201, 36, 103, 0.09), transparent 68%),
+    radial-gradient(ellipse 65% 38% at 90% -6%, rgba(142, 47, 147, 0.07), transparent 65%),
+    radial-gradient(ellipse 80% 40% at 50% 108%, rgba(232, 120, 160, 0.06), transparent 70%);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 16px;
@@ -134,23 +159,26 @@ p {
     border-radius: 10px;
   }
   .btn-primary {
-    background: var(--color-berry);
+    background-color: var(--color-berry);
+    background-image: var(--gradient-brand);
     color: #fff;
-    box-shadow: 0 1px 2px rgba(143, 24, 50, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    box-shadow: 0 1px 2px rgba(163, 23, 79, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
   .btn-primary:hover:not(:disabled) {
-    background: var(--color-berry-dark);
-    box-shadow: 0 4px 12px rgba(176, 32, 63, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    background-color: var(--color-berry-dark);
+    background-image: var(--gradient-brand-hover);
+    box-shadow: 0 6px 16px rgba(201, 36, 103, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
   .btn-secondary {
     background: var(--color-surface);
     color: var(--color-ink);
     border: 1px solid var(--color-line-strong);
-    box-shadow: 0 1px 2px rgba(42, 31, 27, 0.04);
+    box-shadow: 0 1px 2px rgba(45, 20, 32, 0.04);
   }
   .btn-secondary:hover:not(:disabled) {
     background: var(--color-sunken);
-    border-color: var(--color-ink-soft);
+    border-color: var(--color-berry);
+    color: var(--color-berry-dark);
   }
   .btn-ghost {
     color: var(--color-berry);
@@ -161,7 +189,7 @@ p {
   .btn-danger {
     background: var(--color-bad);
     color: #fff;
-    box-shadow: 0 1px 2px rgba(179, 38, 30, 0.25);
+    box-shadow: 0 1px 2px rgba(192, 51, 31, 0.25);
   }
   .btn-danger:hover:not(:disabled) {
     filter: brightness(0.94);
@@ -178,7 +206,7 @@ p {
     background: var(--color-surface);
     color: var(--color-ink);
     font-size: 16px;
-    box-shadow: inset 0 1px 2px rgba(42, 31, 27, 0.03);
+    box-shadow: inset 0 1px 2px rgba(45, 20, 32, 0.03);
     transition:
       border-color 180ms var(--ease-out),
       box-shadow 180ms var(--ease-out);
@@ -189,7 +217,7 @@ p {
     resize: vertical;
   }
   .input::placeholder {
-    color: #8a7a71;
+    color: #8d6676;
   }
   .input:focus {
     outline: none;

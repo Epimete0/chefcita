@@ -727,7 +727,7 @@ export function RegistrarVentasSheet({
                     </span>
                   )}
                   {enLista > 0 && (
-                    <span className="num rounded-full bg-berry px-1.5 text-xs text-white">
+                    <span className="num rounded-full bg-brand px-1.5 text-xs text-white">
                       {formatearCantidadNumero(enLista)}
                     </span>
                   )}

@@ -533,7 +533,7 @@ export default function RecipeDetailView({
       {pestana === 'preparar' && (
         <div className="space-y-6">
           {timerPaso && (
-            <div className="sticky top-20 z-20 flex items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3 text-white shadow-[0_8px_24px_rgba(42,31,27,0.25)]">
+            <div className="sticky top-20 z-20 flex items-center justify-between gap-3 rounded-2xl bg-ink px-5 py-3 text-white shadow-[0_8px_24px_rgba(45,20,32,0.25)]">
               <div className="flex items-center gap-3">
                 <Timer size={24} weight="duotone" />
                 <span className="num font-display text-2xl font-semibold">

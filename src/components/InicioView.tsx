@@ -123,7 +123,7 @@ function PrimerosPasos({
                   p.hecho
                     ? 'bg-ok text-white'
                     : esActual
-                      ? 'bg-berry text-white shadow-[0_4px_12px_rgba(176,32,63,0.28)]'
+                      ? 'bg-brand text-white shadow-[0_4px_12px_rgba(201,36,103,0.28)]'
                       : 'bg-sunken text-ink-soft'
                 }`}
               >
@@ -415,7 +415,7 @@ export default function InicioView(props: InicioViewProps) {
         >
           <div>
             <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-caramel-soft text-caramel">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-orchid-soft text-orchid">
                 <Wallet size={16} weight="duotone" />
               </span>
               Te falta cobrar

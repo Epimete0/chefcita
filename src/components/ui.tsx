@@ -53,7 +53,7 @@ export function Sheet({
       <div
         className={`anim-sheet flex w-full ${anchoClase} ${
           alta ? 'h-[96dvh] sm:h-auto sm:max-h-[92dvh]' : 'max-h-[94dvh]'
-        } flex-col rounded-t-[20px] border border-line/80 bg-surface shadow-[0_-12px_40px_rgba(42,31,27,0.18)] sm:rounded-[20px] sm:shadow-[0_24px_60px_rgba(42,31,27,0.24)]`}
+        } flex-col rounded-t-[20px] border border-line/80 bg-surface shadow-[0_-12px_40px_rgba(45,20,32,0.18)] sm:rounded-[20px] sm:shadow-[0_24px_60px_rgba(45,20,32,0.24)]`}
       >
         <div className="flex justify-center pt-2.5 sm:hidden" aria-hidden="true">
           <span className="h-1 w-10 rounded-full bg-line-strong" />
@@ -215,7 +215,7 @@ export function Segmentos<T extends string>({
             onClick={() => onChange(op.id)}
             className={`flex min-h-[40px] flex-1 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[9px] px-2.5 text-[0.8125rem] font-semibold transition-all duration-150 active:scale-[0.98] sm:px-3 sm:text-sm ${
               activo
-                ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(38,27,24,0.12)]'
+                ? 'bg-surface text-ink shadow-[0_1px_3px_rgba(45,20,32,0.12)]'
                 : 'text-ink-soft hover:text-ink'
             }`}
           >
@@ -284,7 +284,7 @@ export function Vacio({
   return (
     <div className="card anim-rise flex flex-col items-center px-6 py-12 text-center">
       {icono && (
-        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-berry-soft text-berry ring-1 ring-inset ring-berry/15 shadow-[0_6px_18px_rgba(176,32,63,0.12)]">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-berry-soft text-berry ring-1 ring-inset ring-berry/15 shadow-[0_6px_18px_rgba(201,36,103,0.12)]">
           {icono}
         </div>
       )}
