@@ -255,6 +255,7 @@ export default function ChefcitaApp() {
     <div className="min-h-[100dvh] pb-24 md:pb-12">
       {/* Barra superior */}
       <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/85 backdrop-blur-md">
+        <div aria-hidden="true" className="bg-pastel h-[3px]" />
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-6 px-4 sm:px-6">
           <button
             type="button"
@@ -262,7 +263,7 @@ export default function ChefcitaApp() {
             className="group flex cursor-pointer items-center gap-2.5 rounded-xl py-1 pr-2 transition-transform duration-150 active:scale-[0.98]"
             aria-label="Chefcita, ir al inicio"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white shadow-[0_2px_8px_rgba(201,36,103,0.28)] transition-transform duration-200 group-hover:scale-105">
+            <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-brand text-white shadow-[0_2px_8px_rgba(141,83,107,0.28)] transition-transform duration-200 group-hover:scale-105">
               <Cookie size={18} weight="fill" />
             </span>
             <span className="font-display text-brand text-[1.4375rem] font-semibold tracking-tight">
@@ -440,7 +441,7 @@ export default function ChefcitaApp() {
       {aviso && (
         <div
           role="status"
-          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-2xl border border-white/10 bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_12px_32px_rgba(45,20,32,0.32)] md:bottom-8"
+          className="anim-sheet fixed inset-x-4 bottom-[84px] z-[60] mx-auto flex max-w-sm items-center gap-2.5 rounded-2xl border border-white/10 bg-ink px-4 py-3 text-[0.9375rem] font-medium text-white shadow-[0_12px_32px_rgba(54,32,41,0.32)] md:bottom-8"
         >
           <CheckCircle size={20} weight="fill" className="shrink-0 text-[#7ddba6]" />
           {aviso}

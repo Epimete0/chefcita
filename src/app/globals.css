@@ -6,30 +6,43 @@
 }
 
 /*
- * Paleta "Frambuesa y Orquídea"
- * - Frambuesa: color de marca (botones, enlaces, foco). Blanco encima: 5.3:1.
- * - Orquídea: acento secundario y pareja de los degradados.
- * - Ciruela: tinta del texto, reemplaza al marrón para que todo combine con el rosa.
- * - Estados (ok / warn / bad) se mantienen verde, ámbar y rojo anaranjado
- *   para que nunca se confundan con el rosa de la marca.
+ * Paleta de la usuaria: rosa pastel, lila suave, amarillo, crema y rubí.
+ *
+ * - Rubí (#8D536B): el único tono con contraste suficiente para texto y botones
+ *   (blanco encima: 5.9:1). Es el color de marca: botones, enlaces y foco.
+ * - Crema (#FFF4E8): fondo de la página. Las tarjetas quedan blancas encima.
+ * - Rosa pastel (#E9A8BE) y lila (#C9B5DF): demasiado claros para llevar texto
+ *   (1.9:1), así que se usan como fondos suaves, degradados y decoración.
+ * - Amarillo (#F4D77F): se reserva para los avisos, para que su significado sea
+ *   siempre "ojo con esto". También aparece en la franja decorativa.
+ * - Verde (ok) y rojo (error) no vienen en la paleta, pero se conservan porque
+ *   comunican estados y no se pueden reemplazar por pasteles.
  */
 @theme {
-  --color-paper: #fff5f8;
+  /* Colores originales de la paleta */
+  --color-rosa: #e9a8be;
+  --color-lila: #c9b5df;
+  --color-amarillo: #f4d77f;
+  --color-crema: #fff4e8;
+  --color-rubi: #8d536b;
+
+  /* Roles en la interfaz */
+  --color-paper: #fff4e8;
   --color-surface: #ffffff;
-  --color-sunken: #fbe8f0;
-  --color-ink: #2d1420;
-  --color-ink-soft: #7d5163;
-  --color-line: #f4dbe5;
-  --color-line-strong: #e6bfcf;
-  --color-berry: #c92467;
-  --color-berry-dark: #a3174f;
-  --color-berry-soft: #fde6ef;
-  --color-orchid: #8e2f93;
-  --color-orchid-soft: #f7e9fa;
+  --color-sunken: #fbe6e0;
+  --color-ink: #362029;
+  --color-ink-soft: #73606a;
+  --color-line: #f5dedd;
+  --color-line-strong: #e6c0cc;
+  --color-berry: #8d536b;
+  --color-berry-dark: #6e4153;
+  --color-berry-soft: #f9e7ed;
+  --color-lila-soft: #efe9f5;
+  --color-lila-ink: #66547c;
   --color-ok: #1f7a52;
   --color-ok-soft: #e3f4ec;
-  --color-warn: #935200;
-  --color-warn-soft: #fdf0dc;
+  --color-warn: #765d29;
+  --color-warn-soft: #fcf3d9;
   --color-bad: #c0331f;
   --color-bad-soft: #fdece8;
 }
@@ -37,11 +50,14 @@
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
-  --gradient-brand: linear-gradient(135deg, #d1306f 0%, #c92467 45%, #a8297f 100%);
-  --gradient-brand-hover: linear-gradient(135deg, #b81f5e 0%, #a3174f 45%, #8e2f93 100%);
-  --shadow-card: 0 1px 2px rgba(45, 20, 32, 0.04), 0 4px 14px rgba(201, 36, 103, 0.045);
-  --shadow-card-hover: 0 2px 8px rgba(45, 20, 32, 0.06), 0 12px 26px rgba(201, 36, 103, 0.08);
-  --shadow-float: 0 10px 30px rgba(45, 20, 32, 0.16), 0 2px 8px rgba(45, 20, 32, 0.08);
+  /* Rubí que se funde hacia el lila: lleva texto blanco en todos sus tramos */
+  --gradient-brand: linear-gradient(135deg, #9e627a 0%, #8d536b 50%, #7c517b 100%);
+  --gradient-brand-hover: linear-gradient(135deg, #7d4a5f 0%, #6e4153 50%, #5f4a72 100%);
+  /* Los tres pasteles juntos, solo decorativo (sin texto encima) */
+  --gradient-pastel: linear-gradient(90deg, #e9a8be 0%, #c9b5df 50%, #f4d77f 100%);
+  --shadow-card: 0 1px 2px rgba(54, 32, 41, 0.04), 0 4px 14px rgba(141, 83, 107, 0.06);
+  --shadow-card-hover: 0 2px 8px rgba(54, 32, 41, 0.06), 0 12px 26px rgba(141, 83, 107, 0.1);
+  --shadow-float: 0 10px 30px rgba(54, 32, 41, 0.16), 0 2px 8px rgba(54, 32, 41, 0.08);
 }
 
 /* Relleno con el degradado de marca (logo, insignias, paso actual) */
@@ -50,9 +66,14 @@
   background-color: var(--color-berry);
 }
 
-/* Texto con el degradado de marca (solo para titulares grandes) */
+/* Franja con los tres pasteles de la paleta */
+@utility bg-pastel {
+  background-image: var(--gradient-pastel);
+}
+
+/* Texto con degradado rubí → lila (solo para titulares grandes) */
 @utility text-brand {
-  background-image: var(--gradient-brand);
+  background-image: linear-gradient(135deg, #8d536b 0%, #66547c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -68,9 +89,9 @@ body {
   position: relative;
   background-color: var(--color-paper);
   background-image:
-    radial-gradient(ellipse 75% 42% at 12% -8%, rgba(201, 36, 103, 0.09), transparent 68%),
-    radial-gradient(ellipse 65% 38% at 90% -6%, rgba(142, 47, 147, 0.07), transparent 65%),
-    radial-gradient(ellipse 80% 40% at 50% 108%, rgba(232, 120, 160, 0.06), transparent 70%);
+    radial-gradient(ellipse 75% 42% at 10% -8%, rgba(233, 168, 190, 0.42), transparent 68%),
+    radial-gradient(ellipse 65% 38% at 92% -6%, rgba(201, 181, 223, 0.42), transparent 65%),
+    radial-gradient(ellipse 80% 40% at 50% 108%, rgba(244, 215, 127, 0.22), transparent 70%);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 16px;
@@ -162,18 +183,18 @@ p {
     background-color: var(--color-berry);
     background-image: var(--gradient-brand);
     color: #fff;
-    box-shadow: 0 1px 2px rgba(163, 23, 79, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    box-shadow: 0 1px 2px rgba(110, 65, 83, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
   .btn-primary:hover:not(:disabled) {
     background-color: var(--color-berry-dark);
     background-image: var(--gradient-brand-hover);
-    box-shadow: 0 6px 16px rgba(201, 36, 103, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    box-shadow: 0 6px 16px rgba(141, 83, 107, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   }
   .btn-secondary {
     background: var(--color-surface);
     color: var(--color-ink);
     border: 1px solid var(--color-line-strong);
-    box-shadow: 0 1px 2px rgba(45, 20, 32, 0.04);
+    box-shadow: 0 1px 2px rgba(54, 32, 41, 0.04);
   }
   .btn-secondary:hover:not(:disabled) {
     background: var(--color-sunken);
@@ -206,7 +227,7 @@ p {
     background: var(--color-surface);
     color: var(--color-ink);
     font-size: 16px;
-    box-shadow: inset 0 1px 2px rgba(45, 20, 32, 0.03);
+    box-shadow: inset 0 1px 2px rgba(54, 32, 41, 0.03);
     transition:
       border-color 180ms var(--ease-out),
       box-shadow 180ms var(--ease-out);
@@ -217,7 +238,7 @@ p {
     resize: vertical;
   }
   .input::placeholder {
-    color: #8d6676;
+    color: #857079;
   }
   .input:focus {
     outline: none;
