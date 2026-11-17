@@ -40,6 +40,7 @@ interface RecipeDetailViewProps {
   onEditarReceta: (receta: Receta) => void;
   onEliminarReceta: (recetaId: string) => Promise<void>;
   onNuevoPedido: (receta: Receta) => void;
+  onRegistrarVenta?: (receta: Receta) => void;
 }
 
 export const TONO_SALUD: Record<string, Tono> = {
@@ -78,6 +79,7 @@ export default function RecipeDetailView({
   onEditarReceta,
   onEliminarReceta,
   onNuevoPedido,
+  onRegistrarVenta,
 }: RecipeDetailViewProps) {
   const [pestana, setPestana] = useState<'precio' | 'preparar'>('precio');
   const [precioEdit, setPrecioEdit] = useState(String(receta.precio_venta_pack || ''));
@@ -229,15 +231,25 @@ export default function RecipeDetailView({
               {vendeEnPack ? ` · se vende en ${receta.nombre_pack}` : ' · se vende de a uno'}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2.5 sm:gap-3">
             <button type="button" className="btn btn-secondary" onClick={() => onEditarReceta(receta)}>
               <PencilSimple size={18} />
               Editar
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => onNuevoPedido(receta)}>
+            <button type="button" className="btn btn-secondary" onClick={() => onNuevoPedido(receta)}>
               <Plus size={18} weight="bold" />
-              Nuevo pedido
+              Pedido
             </button>
+            {onRegistrarVenta && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => onRegistrarVenta(receta)}
+              >
+                <Plus size={18} weight="bold" />
+                Anotar venta
+              </button>
+            )}
           </div>
         </div>
       </div>

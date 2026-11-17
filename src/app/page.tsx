@@ -8,6 +8,7 @@ import {
   RecetaItem,
   RecetaPaso,
   Pedido,
+  Venta,
   ResumenCostosReceta,
   TipoInsumo,
 } from '@/lib/types';
@@ -22,23 +23,40 @@ import {
   guardarPedidoDB,
   cambiarEstadoPedidoDB,
   eliminarPedidoDB,
+  guardarVentasLoteDB,
+  guardarVentaDB,
+  eliminarVentaDB,
 } from '@/lib/supabase';
 import { calcularCostosReceta } from '@/lib/costing';
 import InicioView from '@/components/InicioView';
+import VentasView, { RegistrarVentasSheet, EditarVentaSheet } from '@/components/VentasView';
 import ProductosView from '@/components/ProductosView';
 import RecipeDetailView from '@/components/RecipeDetailView';
 import RecipeFormModal from '@/components/RecipeFormModal';
 import InsumosView, { InsumoFormSheet } from '@/components/InsumosView';
 import PedidosView, { PedidoFormSheet } from '@/components/PedidosView';
-import { House, ClipboardText, Cookie, Basket, CheckCircle } from '@phosphor-icons/react';
+import {
+  House,
+  Storefront,
+  ClipboardText,
+  Cookie,
+  Basket,
+  CheckCircle,
+} from '@phosphor-icons/react';
 
-type Vista = 'inicio' | 'pedidos' | 'productos' | 'ingredientes';
+type Vista = 'inicio' | 'ventas' | 'pedidos' | 'productos' | 'ingredientes';
 
-const NAVEGACION: Array<{ id: Vista; etiqueta: string; icono: typeof House }> = [
+const NAVEGACION: Array<{
+  id: Vista;
+  etiqueta: string;
+  etiquetaMovil?: string;
+  icono: typeof House;
+}> = [
   { id: 'inicio', etiqueta: 'Inicio', icono: House },
+  { id: 'ventas', etiqueta: 'Ventas', icono: Storefront },
   { id: 'pedidos', etiqueta: 'Pedidos', icono: ClipboardText },
   { id: 'productos', etiqueta: 'Productos', icono: Cookie },
-  { id: 'ingredientes', etiqueta: 'Ingredientes', icono: Basket },
+  { id: 'ingredientes', etiqueta: 'Ingredientes', etiquetaMovil: 'Insumos', icono: Basket },
 ];
 
 export default function ChefcitaApp() {
@@ -47,6 +65,7 @@ export default function ChefcitaApp() {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [ventas, setVentas] = useState<Venta[]>([]);
 
   const [productoAbiertoId, setProductoAbiertoId] = useState<string | null>(null);
   const [pestanaPedidos, setPestanaPedidos] = useState<'pendientes' | 'compras' | 'entregados'>(
@@ -57,6 +76,11 @@ export default function ChefcitaApp() {
   const [formInsumo, setFormInsumo] = useState<{ insumo?: Insumo; tipo?: TipoInsumo } | null>(null);
   const [formReceta, setFormReceta] = useState<{ receta?: Receta } | null>(null);
   const [formPedido, setFormPedido] = useState<{ pedido?: Pedido; recetaId?: string } | null>(null);
+  const [formVentasLote, setFormVentasLote] = useState<{
+    fecha?: string;
+    recetaId?: string;
+  } | null>(null);
+  const [formVentaEditar, setFormVentaEditar] = useState<Venta | null>(null);
 
   const [aviso, setAviso] = useState<string | null>(null);
   const avisar = useCallback((texto: string) => {
@@ -69,6 +93,7 @@ export default function ChefcitaApp() {
     setInsumos(local.insumos);
     setRecetas(local.recetas);
     setPedidos(local.pedidos);
+    setVentas(local.ventas);
   }, []);
 
   useEffect(() => {
@@ -85,6 +110,7 @@ export default function ChefcitaApp() {
       setInsumos(data.insumos);
       setRecetas(data.recetas);
       setPedidos(data.pedidos);
+      setVentas(data.ventas);
     })();
     return () => {
       vigente = false;
@@ -201,6 +227,30 @@ export default function ChefcitaApp() {
     setFormPedido({ recetaId });
   };
 
+  /* --------------------------------- Ventas -------------------------------- */
+
+  const guardarVentasLote = async (nuevas: Array<Omit<Venta, 'id'>>) => {
+    await guardarVentasLoteDB(nuevas);
+    refrescarDesdeCache();
+    avisar(
+      nuevas.length === 1
+        ? `Venta anotada (${nuevas[0].producto_nombre}).`
+        : `${nuevas.length} ventas anotadas.`
+    );
+  };
+
+  const guardarVenta = async (venta: Venta) => {
+    await guardarVentaDB(venta);
+    refrescarDesdeCache();
+    avisar('Venta actualizada.');
+  };
+
+  const eliminarVenta = async (id: string) => {
+    await eliminarVentaDB(id);
+    refrescarDesdeCache();
+    avisar('Venta eliminada.');
+  };
+
   return (
     <div className="min-h-[100dvh] pb-24 md:pb-12">
       {/* Barra superior */}
@@ -267,11 +317,14 @@ export default function ChefcitaApp() {
                 insumos={insumos}
                 recetas={recetas}
                 pedidos={pedidos}
+                ventas={ventas}
                 resumenes={resumenes}
                 insumosMap={insumosMap}
                 onNuevoInsumo={() => setFormInsumo({ tipo: 'ingrediente' })}
                 onNuevoProducto={() => setFormReceta({})}
                 onNuevoPedido={() => nuevoPedido()}
+                onNuevaVenta={(fecha) => setFormVentasLote({ fecha })}
+                onVerVentas={() => irA('ventas')}
                 onVerPedidos={() => irA('pedidos')}
                 onVerEntregados={() => {
                   irA('pedidos');
@@ -283,7 +336,17 @@ export default function ChefcitaApp() {
                 }}
                 onAbrirProducto={abrirProducto}
                 onEditarPedido={(pedido) => setFormPedido({ pedido })}
+                onEditarVenta={(venta) => setFormVentaEditar(venta)}
                 onCambiarEstadoPedido={cambiarEstadoPedido}
+              />
+            )}
+
+            {vista === 'ventas' && (
+              <VentasView
+                ventas={ventas}
+                pedidos={pedidos}
+                onNuevaVenta={(fecha) => setFormVentasLote({ fecha })}
+                onEditarVenta={(venta) => setFormVentaEditar(venta)}
               />
             )}
 
@@ -312,6 +375,7 @@ export default function ChefcitaApp() {
                   onEditarReceta={(receta) => setFormReceta({ receta })}
                   onEliminarReceta={eliminarReceta}
                   onNuevoPedido={(receta) => nuevoPedido(receta.id)}
+                  onRegistrarVenta={(receta) => setFormVentasLote({ recetaId: receta.id })}
                 />
               ) : (
                 <ProductosView
@@ -336,7 +400,7 @@ export default function ChefcitaApp() {
 
       {/* Navegación inferior en celular */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line/80 bg-surface/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line/80 bg-surface/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
         aria-label="Principal"
       >
         {NAVEGACION.map((item) => {
@@ -348,23 +412,25 @@ export default function ChefcitaApp() {
               type="button"
               aria-current={activo ? 'page' : undefined}
               onClick={() => irA(item.id)}
-              className={`relative flex min-h-[62px] cursor-pointer flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-transform duration-150 active:scale-95 ${
+              className={`relative flex min-h-[62px] cursor-pointer flex-col items-center justify-center gap-0.5 px-1 text-[11px] font-semibold transition-transform duration-150 active:scale-95 sm:text-xs ${
                 activo ? 'text-berry' : 'text-ink-soft'
               }`}
             >
               <span
-                className={`relative flex h-7 w-12 items-center justify-center rounded-full transition-colors ${
+                className={`relative flex h-7 w-11 items-center justify-center rounded-full transition-colors ${
                   activo ? 'bg-berry-soft' : ''
                 }`}
               >
-                <Icono size={22} weight={activo ? 'fill' : 'regular'} />
+                <Icono size={21} weight={activo ? 'fill' : 'regular'} />
                 {item.id === 'pedidos' && porEntregar > 0 && (
                   <span className="num absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-berry px-1 text-center text-[11px] leading-[18px] text-white">
                     {porEntregar}
                   </span>
                 )}
               </span>
-              {item.etiqueta}
+              <span className="max-w-full truncate">
+                {item.etiquetaMovil || item.etiqueta}
+              </span>
             </button>
           );
         })}
@@ -417,6 +483,28 @@ export default function ChefcitaApp() {
           onClose={() => setFormPedido(null)}
           onGuardar={guardarPedido}
           onEliminar={eliminarPedido}
+        />
+      )}
+
+      {formVentasLote && (
+        <RegistrarVentasSheet
+          fechaInicial={formVentasLote.fecha}
+          recetaInicialId={formVentasLote.recetaId}
+          recetas={recetas}
+          insumosMap={insumosMap}
+          onClose={() => setFormVentasLote(null)}
+          onGuardarLote={guardarVentasLote}
+        />
+      )}
+
+      {formVentaEditar && (
+        <EditarVentaSheet
+          venta={formVentaEditar}
+          recetas={recetas}
+          insumosMap={insumosMap}
+          onClose={() => setFormVentaEditar(null)}
+          onGuardar={guardarVenta}
+          onEliminar={eliminarVenta}
         />
       )}
     </div>

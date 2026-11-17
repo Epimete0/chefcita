@@ -5,6 +5,7 @@ import {
   ResumenCostosReceta,
   UnidadMedida,
   Pedido,
+  Venta,
   EstadoSaludPrecio,
   DesgloseItemCosto,
 } from './types';
@@ -348,6 +349,65 @@ const FORMATO_DIA = new Intl.DateTimeFormat('es-CL', {
   month: 'short',
 });
 
+const FORMATO_DIA_LARGO = new Intl.DateTimeFormat('es-CL', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+});
+
+const FORMATO_MES_ANIO = new Intl.DateTimeFormat('es-CL', {
+  month: 'long',
+  year: 'numeric',
+});
+
+function dateAISO(d: Date): string {
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+/** Suma o resta días a una fecha YYYY-MM-DD en calendario local */
+export function sumarDiasISO(fechaISO: string, dias: number): string {
+  const base = fechaLocal(fechaISO) || fechaLocal(hoyISO())!;
+  return dateAISO(new Date(base.getFullYear(), base.getMonth(), base.getDate() + dias));
+}
+
+/** Suma o resta meses a un mes YYYY-MM */
+export function sumarMesISO(mesISO: string, meses: number): string {
+  const [a, m] = (mesISO || '').split('-').map(Number);
+  const d = a && m ? new Date(a, m - 1 + meses, 1) : new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Formatea un mes YYYY-MM como "noviembre 2026" */
+export function formatearMesAnio(mesISO: string): string {
+  const [a, m] = (mesISO || '').split('-').map(Number);
+  if (!a || !m) return mesISO;
+  return FORMATO_MES_ANIO.format(new Date(a, m - 1, 1));
+}
+
+/** Formatea la fecha de una venta diaria sin usar etiquetas de atraso */
+export function formatearFechaVenta(fechaISO: string): {
+  texto: string;
+  corta: string;
+  larga: string;
+  esHoy: boolean;
+  esAyer: boolean;
+} {
+  const fecha = fechaLocal(fechaISO);
+  if (!fecha) {
+    return { texto: 'Sin fecha', corta: 'Sin fecha', larga: 'Sin fecha', esHoy: false, esAyer: false };
+  }
+  const hoy = fechaLocal(hoyISO())!;
+  const dias = Math.round((fecha.getTime() - hoy.getTime()) / 86400000);
+  const corta = FORMATO_DIA.format(fecha).split('.').join('');
+  const larga = FORMATO_DIA_LARGO.format(fecha);
+  const esHoy = dias === 0;
+  const esAyer = dias === -1;
+  const texto = esHoy ? 'Hoy' : esAyer ? 'Ayer' : dias === 1 ? 'Mañana' : corta;
+  return { texto, corta, larga, esHoy, esAyer };
+}
+
 export type TonoFecha = 'atrasado' | 'hoy' | 'pronto' | 'normal';
 
 /** Convierte una fecha de entrega en algo que se lee de un vistazo: Hoy, Mañana, vie 20 nov */
@@ -424,4 +484,169 @@ export function singular(palabra: string): string {
   if (/(d|l|n|r|z)es$/i.test(p) && p.length > 4) return p.slice(0, -2);
   if (/s$/i.test(p) && p.length > 2) return p.slice(0, -1);
   return p;
+}
+
+export interface ResultadoCalculoVenta {
+  presentacionNombre: string;
+  unidadesPorPresentacion: number;
+  unidadesTotales: number;
+  precioSugeridoUnitario: number;
+  precioUnitario: number;
+  totalVenta: number;
+  costoUnitarioEstimado: number;
+  costoTotalEstimado: number;
+  gananciaNeta: number;
+  costoIncompleto: boolean;
+}
+
+/** Calcula unidades, costo estimado, precio y ganancia para una línea de venta diaria */
+export function calcularMontosVenta({
+  receta,
+  insumosMap,
+  cantidad,
+  modoPresentacion = 'pack',
+  precioUnitarioManual,
+  totalManual,
+}: {
+  receta?: Receta;
+  insumosMap: Map<string, Insumo>;
+  cantidad: number;
+  modoPresentacion?: 'pack' | 'unidad';
+  precioUnitarioManual?: number;
+  totalManual?: number;
+}): ResultadoCalculoVenta {
+  const cant = Math.max(0, Number(cantidad) || 0);
+  if (!receta) {
+    const unit = Math.max(0, Number(precioUnitarioManual) || 0);
+    const total =
+      totalManual !== undefined ? Math.max(0, Number(totalManual) || 0) : Math.round(unit * cant);
+    return {
+      presentacionNombre: 'Unidad',
+      unidadesPorPresentacion: 1,
+      unidadesTotales: cant,
+      precioSugeridoUnitario: 0,
+      precioUnitario: cant > 0 && totalManual !== undefined ? Math.round(total / cant) : unit,
+      totalVenta: total,
+      costoUnitarioEstimado: 0,
+      costoTotalEstimado: 0,
+      gananciaNeta: 0,
+      costoIncompleto: true,
+    };
+  }
+
+  const res = calcularCostosReceta(receta, insumosMap, 1);
+  const unidPack = Math.max(1, Number(receta.unidades_por_pack) || 1);
+  const porUnidad = modoPresentacion === 'unidad' || unidPack <= 1;
+
+  const presentacionNombre =
+    modoPresentacion === 'unidad'
+      ? singular(receta.rendimiento_unidad)
+      : unidPack > 1
+        ? receta.nombre_pack || `Caja x${unidPack}`
+        : receta.nombre_pack && receta.nombre_pack !== 'Unidad'
+          ? receta.nombre_pack
+          : singular(receta.rendimiento_unidad);
+
+  const unidadesPorPresentacion = porUnidad && modoPresentacion === 'unidad' ? 1 : unidPack;
+  const unidadesTotales = cant * unidadesPorPresentacion;
+
+  const precioSugeridoUnitario = Math.round(
+    porUnidad && modoPresentacion === 'unidad' ? res.precioVentaUnidad : res.precioVentaPack
+  );
+  const costoUnitarioEstimado = Math.round(
+    porUnidad && modoPresentacion === 'unidad' ? res.costoPorUnidad : res.costoPorPack
+  );
+
+  const unit =
+    precioUnitarioManual !== undefined ? Math.max(0, Number(precioUnitarioManual) || 0) : precioSugeridoUnitario;
+  const totalVenta =
+    totalManual !== undefined ? Math.max(0, Number(totalManual) || 0) : Math.round(unit * cant);
+  const precioUnitario =
+    cant > 0 && totalManual !== undefined ? Math.round(totalVenta / cant) : unit;
+  const costoTotalEstimado = Math.round(costoUnitarioEstimado * cant);
+  const costoIncompleto = res.costoIncompleto;
+  const gananciaNeta = costoIncompleto ? 0 : totalVenta - costoTotalEstimado;
+
+  return {
+    presentacionNombre,
+    unidadesPorPresentacion,
+    unidadesTotales,
+    precioSugeridoUnitario,
+    precioUnitario,
+    totalVenta,
+    costoUnitarioEstimado,
+    costoTotalEstimado,
+    gananciaNeta,
+    costoIncompleto,
+  };
+}
+
+export interface ResumenProductoVendido {
+  clave: string;
+  productoNombre: string;
+  presentacionNombre: string;
+  cantidad: number;
+  unidadesTotales: number;
+  totalVenta: number;
+}
+
+export interface ResumenVentasGrupo {
+  totalVendido: number;
+  cantidadRegistros: number;
+  cantidadPresentaciones: number;
+  gananciaConocida: number;
+  tieneCostoIncompleto: boolean;
+  productos: ResumenProductoVendido[];
+}
+
+/** Agrupa y suma un conjunto de ventas (por ejemplo, de un día o de un mes) */
+export function resumirVentas(ventas: Venta[]): ResumenVentasGrupo {
+  let totalVendido = 0;
+  let cantidadPresentaciones = 0;
+  let gananciaConocida = 0;
+  let tieneCostoIncompleto = false;
+  const mapa = new Map<string, ResumenProductoVendido>();
+
+  for (const v of ventas) {
+    const total = Number(v.total_venta) || 0;
+    const cant = Number(v.cantidad) || 0;
+    const unid = Number(v.unidades_totales) || cant;
+    totalVendido += total;
+    cantidadPresentaciones += cant;
+    if (v.costo_incompleto) {
+      tieneCostoIncompleto = true;
+    } else {
+      gananciaConocida += Number(v.ganancia_neta) || 0;
+    }
+
+    const clave = `${v.producto_nombre}::${v.presentacion_nombre}`;
+    const actual = mapa.get(clave);
+    if (actual) {
+      actual.cantidad += cant;
+      actual.unidadesTotales += unid;
+      actual.totalVenta += total;
+    } else {
+      mapa.set(clave, {
+        clave,
+        productoNombre: v.producto_nombre,
+        presentacionNombre: v.presentacion_nombre,
+        cantidad: cant,
+        unidadesTotales: unid,
+        totalVenta: total,
+      });
+    }
+  }
+
+  const productos = Array.from(mapa.values()).sort(
+    (a, b) => b.totalVenta - a.totalVenta || b.cantidad - a.cantidad
+  );
+
+  return {
+    totalVendido,
+    cantidadRegistros: ventas.length,
+    cantidadPresentaciones,
+    gananciaConocida,
+    tieneCostoIncompleto,
+    productos,
+  };
 }

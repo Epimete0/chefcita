@@ -1,6 +1,7 @@
 # Chefcita · Atelier Personal de Pastelería, Costos y Recetario 🍓🍩
 
 Aplicación web enfocada en **mobile y desktop** para gestionar tu pastelería artesanal desde casa:
+- **Registro de Ventas Diarias**: Anotá en segundos todo lo que vendés en el día (por cajas/packs o unidades), con fecha editable, carga múltiple de productos, resumen por día e historial mensual.
 - **Desglose Real por Producto**: Calculá por separado cuánto cuesta la **Masa / Base**, el **Relleno / Cobertura**, el **Empaque (cajas, stickers, papel, cinta)** y los **Gastos Extras (horno, gas, luz)**.
 - **Simulador de Precio de Venta y Diagnóstico de Ganancia**: Mirá al instante cuánto te cuesta cada unidad, cada caja/pack (ej. *Caja x6 Donas*) y cada tanda completa, con semáforo de rentabilidad y sugerencias de precio (`x2`, `x2.5`, `x3`).
 - **Modo Preparar (Recetario Interactivo)**: Escalador de tanda en 1 toque (`½ lote`, `1 lote`, `1.5x`, `2x`, `3x` o unidades exactas), checklist de pesaje (*Mise en place*) y pasos con **temporizador de cocina integrado**.

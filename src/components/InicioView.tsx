@@ -1,17 +1,20 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { EstadoPedido, Insumo, Pedido, Receta, ResumenCostosReceta } from '@/lib/types';
+import { EstadoPedido, Insumo, Pedido, Receta, ResumenCostosReceta, Venta } from '@/lib/types';
 import {
   calcularListaCompras,
   formatearCantidad,
   formatearMoneda,
   hoyISO,
+  resumirVentas,
+  sumarDiasISO,
 } from '@/lib/costing';
 import { Etiqueta } from './ui';
 import { TarjetaPedido } from './PedidosView';
+import { TarjetaVenta } from './VentasView';
 import { TONO_SALUD, TEXTO_SALUD } from './RecipeDetailView';
-import { Plus, Check, CaretRight, ArrowRight, Wallet, TrendUp } from '@phosphor-icons/react';
+import { Plus, Check, CaretRight, ArrowRight, Wallet, TrendUp, Storefront } from '@phosphor-icons/react';
 
 const FORMATO_HOY = new Intl.DateTimeFormat('es-CL', {
   weekday: 'long',
@@ -24,16 +27,20 @@ interface InicioViewProps {
   insumos: Insumo[];
   recetas: Receta[];
   pedidos: Pedido[];
+  ventas: Venta[];
   resumenes: Map<string, ResumenCostosReceta>;
   insumosMap: Map<string, Insumo>;
   onNuevoInsumo: () => void;
   onNuevoProducto: () => void;
   onNuevoPedido: () => void;
+  onNuevaVenta: (fecha?: string) => void;
+  onVerVentas: () => void;
   onVerPedidos: () => void;
   onVerEntregados?: () => void;
   onVerCompras: () => void;
   onAbrirProducto: (id: string) => void;
   onEditarPedido: (pedido: Pedido) => void;
+  onEditarVenta: (venta: Venta) => void;
   onCambiarEstadoPedido: (pedido: Pedido, estado: EstadoPedido) => void;
 }
 
@@ -45,12 +52,13 @@ function PrimerosPasos({
   insumos,
   recetas,
   pedidos,
+  ventas,
   onNuevoInsumo,
   onNuevoProducto,
-  onNuevoPedido,
+  onNuevaVenta,
 }: Pick<
   InicioViewProps,
-  'insumos' | 'recetas' | 'pedidos' | 'onNuevoInsumo' | 'onNuevoProducto' | 'onNuevoPedido'
+  'insumos' | 'recetas' | 'pedidos' | 'ventas' | 'onNuevoInsumo' | 'onNuevoProducto' | 'onNuevaVenta'
 >) {
   const pasos = [
     {
@@ -74,14 +82,14 @@ function PrimerosPasos({
       onClick: onNuevoProducto,
     },
     {
-      titulo: 'Anota tu primer pedido',
+      titulo: 'Anota tu primera venta o pedido',
       texto:
-        'Quién te pidió qué y para cuándo. Te mostramos cuánto ganas y qué te falta comprar.',
-      hecho: pedidos.length > 0,
+        'Registra lo que vendes en el día o los encargos que te hacen, con fecha editable y total cobrado.',
+      hecho: ventas.length > 0 || pedidos.length > 0,
       resumenHecho: '',
-      accion: 'Nuevo pedido',
+      accion: 'Anotar venta',
       accionExtra: '',
-      onClick: onNuevoPedido,
+      onClick: () => onNuevaVenta(),
     },
   ];
   const actual = pasos.findIndex((p) => !p.hecho);
@@ -149,6 +157,15 @@ function PrimerosPasos({
           );
         })}
       </ol>
+      <div className="mt-5 text-center">
+        <button
+          type="button"
+          onClick={() => onNuevaVenta()}
+          className="cursor-pointer text-sm font-semibold text-berry hover:underline"
+        >
+          ¿Solo quieres anotar una venta del día ahora? Hazlo aquí
+        </button>
+      </div>
     </div>
   );
 }
@@ -161,17 +178,35 @@ export default function InicioView(props: InicioViewProps) {
   const {
     recetas,
     pedidos,
+    ventas,
     resumenes,
     insumosMap,
-    onNuevoProducto,
     onNuevoPedido,
+    onNuevaVenta,
+    onVerVentas,
     onVerPedidos,
-    onVerEntregados,
     onVerCompras,
     onAbrirProducto,
     onEditarPedido,
+    onEditarVenta,
     onCambiarEstadoPedido,
   } = props;
+
+  const hoyIso = hoyISO();
+  const ayerIso = sumarDiasISO(hoyIso, -1);
+  const mesActual = hoyIso.slice(0, 7);
+
+  const ventasHoy = useMemo(() => ventas.filter((v) => v.fecha === hoyIso), [ventas, hoyIso]);
+  const resumenHoy = useMemo(() => resumirVentas(ventasHoy), [ventasHoy]);
+
+  const ventasAyer = useMemo(() => ventas.filter((v) => v.fecha === ayerIso), [ventas, ayerIso]);
+  const resumenAyer = useMemo(() => resumirVentas(ventasAyer), [ventasAyer]);
+
+  const ventasMes = useMemo(
+    () => ventas.filter((v) => v.fecha.startsWith(mesActual)),
+    [ventas, mesActual]
+  );
+  const resumenVentasMes = useMemo(() => resumirVentas(ventasMes), [ventasMes]);
 
   const pendientes = useMemo(
     () =>
@@ -181,14 +216,19 @@ export default function InicioView(props: InicioViewProps) {
     [pedidos]
   );
 
-  const mesActual = hoyISO().slice(0, 7);
+  const entregadosMes = useMemo(
+    () => pedidos.filter((p) => p.estado === 'entregado' && p.fecha_entrega.startsWith(mesActual)),
+    [pedidos, mesActual]
+  );
+
   const porCobrar = pendientes.reduce(
     (s, p) => s + Math.max(0, p.precio_venta_total - p.seña_pagada),
     0
   );
-  const gananciaMes = pedidos
-    .filter((p) => p.estado === 'entregado' && p.fecha_entrega.startsWith(mesActual))
-    .reduce((s, p) => s + p.ganancia_neta, 0);
+  const vendidoPedidosMes = entregadosMes.reduce((s, p) => s + p.precio_venta_total, 0);
+  const vendidoMesTotal = resumenVentasMes.totalVendido + vendidoPedidosMes;
+  const gananciaMes =
+    resumenVentasMes.gananciaConocida + entregadosMes.reduce((s, p) => s + p.ganancia_neta, 0);
 
   const faltantes = useMemo(
     () => calcularListaCompras(pedidos, recetas, insumosMap).filter((i) => i.faltante > 0),
@@ -200,8 +240,8 @@ export default function InicioView(props: InicioViewProps) {
     return res && (res.costoIncompleto || res.estadoSalud === 'perdida' || res.estadoSalud === 'bajo');
   });
 
-  // Mientras no exista un producto y un pedido, la pantalla es la guía de primeros pasos
-  if (recetas.length === 0 || pedidos.length === 0) {
+  // Mientras no haya productos ni registros, la pantalla es la guía de primeros pasos
+  if (recetas.length === 0 && ventas.length === 0 && pedidos.length === 0) {
     return <PrimerosPasos {...props} />;
   }
 
@@ -215,26 +255,159 @@ export default function InicioView(props: InicioViewProps) {
             {hoy}
           </h1>
           <p className="mt-1.5 text-[0.9375rem] text-ink-soft">
+            {resumenHoy.cantidadRegistros > 0
+              ? `Hoy llevas ${formatearMoneda(resumenHoy.totalVendido)} en ventas`
+              : 'Aún no registras ventas hoy'}
             {pendientes.length === 0
-              ? 'No tienes pedidos por entregar.'
+              ? ' · Sin pedidos pendientes.'
               : pendientes.length === 1
-                ? 'Tienes 1 pedido por entregar.'
-                : `Tienes ${pendientes.length} pedidos por entregar.`}
+                ? ' · 1 pedido por entregar.'
+                : ` · ${pendientes.length} pedidos por entregar.`}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button type="button" className="btn btn-secondary" onClick={onNuevoProducto}>
-            <Plus size={18} weight="bold" />
-            Producto
-          </button>
-          <button type="button" className="btn btn-primary" onClick={onNuevoPedido}>
+          <button type="button" className="btn btn-secondary" onClick={onNuevoPedido}>
             <Plus size={18} weight="bold" />
             Nuevo pedido
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => onNuevaVenta(hoyIso)}>
+            <Plus size={18} weight="bold" />
+            Anotar venta
           </button>
         </div>
       </div>
 
-      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+      {/* =========================== VENTAS DE HOY ============================ */}
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line p-4 sm:p-5">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-berry">
+              <Storefront size={17} weight="duotone" />
+              Ventas de hoy
+            </div>
+            <div className="num font-display mt-1 text-[1.875rem] font-semibold leading-none sm:text-[2.125rem]">
+              {formatearMoneda(resumenHoy.totalVendido)}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={onVerVentas} className="btn btn-secondary btn-sm">
+              Ver por día
+              <ArrowRight size={14} weight="bold" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onNuevaVenta(hoyIso)}
+              className="btn btn-primary btn-sm"
+            >
+              <Plus size={16} weight="bold" />
+              {ventasHoy.length > 0 ? 'Agregar más' : 'Anotar venta'}
+            </button>
+          </div>
+        </div>
+
+        {ventasHoy.length === 0 ? (
+          <div className="px-5 py-6 text-center sm:px-6">
+            <p className="text-[0.9375rem] text-ink-soft">
+              Anota lo que vendes en el día (por ejemplo: 3 cajas de donas, 2 mini pies) y edita la
+              fecha si quieres cargar ventas de otro día.
+            </p>
+            {resumenAyer.cantidadRegistros > 0 && (
+              <p className="mt-2 text-sm text-ink-soft">
+                Ayer vendiste{' '}
+                <strong className="num text-ink">{formatearMoneda(resumenAyer.totalVendido)}</strong>
+                .
+              </p>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2 border-b border-line bg-paper/55 px-4 py-3 sm:px-5">
+              {resumenHoy.productos.map((p) => (
+                <span
+                  key={p.clave}
+                  className="num rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-semibold text-ink"
+                >
+                  {String(Math.round(p.cantidad * 100) / 100).replace('.', ',')} ×{' '}
+                  {p.presentacionNombre} · {p.productoNombre}
+                </span>
+              ))}
+            </div>
+            <div className="divide-y divide-line">
+              {ventasHoy.slice(0, 5).map((v) => (
+                <TarjetaVenta key={v.id} venta={v} onEditar={onEditarVenta} />
+              ))}
+            </div>
+            {ventasHoy.length > 5 && (
+              <button
+                type="button"
+                onClick={onVerVentas}
+                className="flex min-h-[46px] w-full cursor-pointer items-center justify-between border-t border-line px-4 text-sm font-semibold text-berry hover:bg-paper sm:px-5"
+              >
+                Ver las {ventasHoy.length} ventas de hoy
+                <CaretRight size={14} weight="bold" />
+              </button>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* ============================== RESUMEN ============================== */}
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+        <button
+          type="button"
+          onClick={onVerVentas}
+          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+        >
+          <div className="min-w-0">
+            <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-berry-soft text-berry">
+                <Storefront size={16} weight="duotone" />
+              </span>
+              Vendido en {FORMATO_MES.format(new Date())}
+            </dt>
+            <dd className="num font-display mt-2 text-2xl font-semibold sm:text-[1.75rem]">
+              {formatearMoneda(vendidoMesTotal)}
+            </dd>
+            {vendidoPedidosMes > 0 && resumenVentasMes.totalVendido > 0 && (
+              <div className="num mt-0.5 text-xs text-ink-soft">
+                {formatearMoneda(resumenVentasMes.totalVendido)} diario ·{' '}
+                {formatearMoneda(vendidoPedidosMes)} pedidos
+              </div>
+            )}
+          </div>
+          <CaretRight
+            size={18}
+            weight="bold"
+            className="shrink-0 text-ink-soft transition-transform duration-150 group-hover:translate-x-0.5"
+          />
+        </button>
+
+        <button
+          type="button"
+          onClick={onVerVentas}
+          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
+        >
+          <div className="min-w-0">
+            <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ok-soft text-ok">
+                <TrendUp size={16} weight="duotone" />
+              </span>
+              Ganancia de {FORMATO_MES.format(new Date())}
+            </dt>
+            <dd className="num font-display mt-2 text-2xl font-semibold text-ok sm:text-[1.75rem]">
+              {formatearMoneda(gananciaMes)}
+            </dd>
+            {resumenVentasMes.tieneCostoIncompleto && (
+              <div className="mt-0.5 text-xs text-ink-soft">Solo de productos con costo listo</div>
+            )}
+          </div>
+          <CaretRight
+            size={18}
+            weight="bold"
+            className="shrink-0 text-ink-soft transition-transform duration-150 group-hover:translate-x-0.5"
+          />
+        </button>
+
         <button
           type="button"
           onClick={onVerPedidos}
@@ -247,30 +420,8 @@ export default function InicioView(props: InicioViewProps) {
               </span>
               Te falta cobrar
             </dt>
-            <dd className="num font-display mt-2 text-2xl font-semibold sm:text-[1.875rem]">
+            <dd className="num font-display mt-2 text-2xl font-semibold sm:text-[1.75rem]">
               {formatearMoneda(porCobrar)}
-            </dd>
-          </div>
-          <CaretRight
-            size={18}
-            weight="bold"
-            className="shrink-0 text-ink-soft transition-transform duration-150 group-hover:translate-x-0.5"
-          />
-        </button>
-        <button
-          type="button"
-          onClick={onVerEntregados || onVerPedidos}
-          className="card card-interactive group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left sm:p-5"
-        >
-          <div>
-            <dt className="flex items-center gap-2 text-sm font-medium text-ink-soft">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-ok-soft text-ok">
-                <TrendUp size={16} weight="duotone" />
-              </span>
-              Ganancia de {FORMATO_MES.format(new Date())}
-            </dt>
-            <dd className="num font-display mt-2 text-2xl font-semibold text-ok sm:text-[1.875rem]">
-              {formatearMoneda(gananciaMes)}
             </dd>
           </div>
           <CaretRight

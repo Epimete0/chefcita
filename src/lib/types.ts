@@ -90,6 +90,27 @@ export interface Pedido {
   created_at?: string;
 }
 
+export interface Venta {
+  id: string;
+  fecha: string;
+  receta_id: string | null;
+  producto_nombre: string;
+  presentacion_nombre: string;
+  cantidad: number;
+  unidades_por_presentacion: number;
+  unidades_totales: number;
+  precio_unitario: number;
+  total_venta: number;
+  costo_unitario_estimado: number;
+  costo_total_estimado: number;
+  ganancia_neta: number;
+  costo_incompleto: boolean;
+  cliente_o_referencia: string;
+  notas: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export type EstadoSaludPrecio = 'perdida' | 'bajo' | 'correcto' | 'excelente';
 
 export interface DesgloseItemCosto {
